@@ -80,7 +80,14 @@ When a task is marked `[x]` or user says a task is done:
 - **Entry format:** `{"timestamp", "action", "source_file", "details", "result"}`
 - **Valid actions:** `triage`, `complete`, `move`, `create`, `update_dashboard`, `error`
 
-If the day's log file doesn't exist, create it with `[]`. Parse existing array, append entry, write back.
+**Read-parse-append-write pattern:**
+1. Compute filename: `/Logs/YYYY-MM-DD.json`
+2. If file doesn't exist, create with `[]`
+3. Read and parse existing JSON array
+4. Append new entry object
+5. Write full array back with 2-space indentation
+
+**Malformed JSON recovery:** If JSON parse fails, rename to `.bak`, create fresh `[]`, log the error as first entry, report to user.
 
 Full schema and examples: [references/log-format.md](references/log-format.md)
 

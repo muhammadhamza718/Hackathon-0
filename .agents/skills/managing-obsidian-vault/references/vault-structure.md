@@ -6,16 +6,20 @@ Complete folder and file schema for the Digital FTE Obsidian Vault.
 
 ```
 vault-root/
-├── Inbox/              # Raw incoming items (emails, messages, file drops)
-├── Needs_Action/       # Triaged items requiring attention
-├── Done/               # Completed or informational items (archive)
-├── Plans/              # Draft plans, proposals, strategies in progress
-├── Pending_Approval/   # Items awaiting user approval (beyond autonomy)
-├── Approved/           # User-approved plans ready for execution
-├── Logs/               # Daily JSON audit logs
-├── Dashboard.md        # Live status overview (auto-rebuilt)
-└── Company_Handbook.md # Rules, priorities, autonomy boundaries
+├── Inbox/              # [Bronze] Raw incoming items (emails, messages, file drops)
+├── Needs_Action/       # [Bronze] Triaged items requiring attention
+├── Done/               # [Bronze] Completed or informational items (archive)
+├── Pending_Approval/   # [Bronze] Items awaiting user approval (beyond autonomy)
+├── Logs/               # [Bronze] Daily JSON audit logs
+├── Plans/              # [Silver+] Draft plans, proposals, strategies in progress
+├── Approved/           # [Silver+] User-approved plans ready for execution
+├── Dashboard.md        # [Bronze] Live status overview (auto-rebuilt)
+└── Company_Handbook.md # [Bronze] Rules, priorities, autonomy boundaries
 ```
+
+**Tier Legend:**
+- **[Bronze]** — Required at Bronze Tier. Created during vault initialization.
+- **[Silver+]** — Available at Silver Tier and above. Not created at Bronze Tier.
 
 ## Folder Descriptions
 
@@ -47,7 +51,8 @@ vault-root/
 - **Contents:** All processed files from Inbox, completed Plans
 - **Retention:** Indefinite unless user specifies cleanup policy
 
-### `/Plans/`
+### `/Plans/` [Silver+]
+- **Tier:** Silver and above
 - **Purpose:** Draft plans, proposals, and strategies in progress
 - **Contents:** Markdown files with structured plan format
 - **Lifecycle:** Created during task processing → `/Done/` on completion, or → `/Pending_Approval/` if beyond autonomy
@@ -62,7 +67,7 @@ vault-root/
   **Action:** What needs to be done
   **Context:** Why this needs approval (references source file)
   **Priority:** #high | #medium | #low
-  **Source:** [[Inbox/FILENAME]] or [[Plans/FILENAME]]
+  **Source:** [[Inbox/FILENAME]]
 
   ## Decision
   - [ ] Approve
@@ -71,7 +76,8 @@ vault-root/
   **Notes:** (user fills in)
   ```
 
-### `/Approved/`
+### `/Approved/` [Silver+]
+- **Tier:** Silver and above
 - **Purpose:** User-approved items ready for execution
 - **Contents:** Approved plans moved from `/Pending_Approval/`
 - **Lifecycle:** Executed → moved to `/Done/`
@@ -98,9 +104,10 @@ vault-root/
 
 ## Health Check Criteria
 
-A vault is healthy when:
-1. All 7 folders exist and are accessible
+A vault is healthy when (Bronze Tier):
+1. All 5 Bronze folders exist and are accessible (Inbox, Needs_Action, Done, Pending_Approval, Logs)
 2. `Dashboard.md` exists and is non-empty
 3. `Company_Handbook.md` exists and is non-empty
 4. No orphaned files outside the folder structure
 5. Current day's log file exists in `/Logs/`
+6. Total: 7 items verified (5 folders + 2 core files)

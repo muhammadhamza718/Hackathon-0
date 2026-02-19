@@ -61,7 +61,7 @@ JSON schema and examples for `/Logs/YYYY-MM-DD.json` files.
     "timestamp": "2026-02-19T09:00:00Z",
     "action": "triage",
     "source_file": "Inbox/client-email-feb19.md",
-    "details": "Triaged email from client. Keywords matched: invoice, payment. Classified as #high. Moved to Needs_Action.",
+    "details": "Triaged email from client. Rationale: keywords matched 'invoice', 'payment' → #high per triage-rules.md. Classified as actionable. Routed to Needs_Action/.",
     "result": "success"
   },
   {
@@ -111,6 +111,42 @@ JSON schema and examples for `/Logs/YYYY-MM-DD.json` files.
   "source_file": "Logs/2026-02-19.json",
   "details": "Malformed JSON in existing log file. Backed up as 2026-02-19.json.bak, created fresh log.",
   "result": "failure"
+}
+```
+
+### Move action example
+
+```json
+{
+  "timestamp": "2026-02-19T11:00:00Z",
+  "action": "move",
+  "source_file": "Inbox/urgent-client-email.md",
+  "details": "Moved source file to Done/ after task completion. Rationale: user confirmed task finished.",
+  "result": "success"
+}
+```
+
+### Create action example (approval routing)
+
+```json
+{
+  "timestamp": "2026-02-19T09:05:00Z",
+  "action": "create",
+  "source_file": "Pending_Approval/approve-send-email-2026-02-19.md",
+  "details": "Created approval request. Rationale: restricted action detected — 'send email' keyword found in Inbox/client-followup.md. Routed to Pending_Approval per Bronze Tier HITL rules.",
+  "result": "success"
+}
+```
+
+### Create action example (vault initialization)
+
+```json
+{
+  "timestamp": "2026-02-19T08:00:00Z",
+  "action": "create",
+  "source_file": "none",
+  "details": "Vault initialized. Created 5 Bronze Tier folders (Inbox, Needs_Action, Done, Pending_Approval, Logs) and 2 core files (Dashboard.md, Company_Handbook.md). 7 items total.",
+  "result": "success"
 }
 ```
 
