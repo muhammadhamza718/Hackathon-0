@@ -1,6 +1,6 @@
 ---
 name: managing-obsidian-vault
-description: Step-by-step procedures for managing an Obsidian Vault used by a Digital FTE (Personal AI Employee). Covers vault initialization, inbox triage, dashboard updates, task completion lifecycle, audit logging, and approval routing. Use when the user mentions vault, inbox, triage, dashboard, needs action, obsidian, FTE, AI employee, or when working with .md files in /Inbox/, /Needs_Action/, /Done/, /Plans/, /Pending_Approval/, /Approved/, or /Logs/ folders.
+description: Step-by-step procedures for managing an Obsidian Vault used by a Digital FTE (Personal AI Employee). Covers vault initialization, inbox triage, dashboard updates, task completion lifecycle, audit logging, and approval routing. Use when the user mentions vault, inbox, triage, dashboard, needs action, obsidian, FTE, AI employee, or when working with .md files in /Inbox/, /Needs_Action/, /Done/, /Pending_Approval/, or /Logs/ folders. Bronze Tier only — no external APIs, no autonomous loops.
 ---
 
 # Managing Obsidian Vault
@@ -15,10 +15,10 @@ Before any operation, verify the vault root path. All paths below are relative t
 
 Create the full folder structure, core files, and verify health.
 
-1. Create folders: `/Inbox`, `/Needs_Action`, `/Done`, `/Plans`, `/Pending_Approval`, `/Approved`, `/Logs`
+1. Create Bronze Tier folders using `Bash(mkdir -p)` for idempotent creation: `/Inbox`, `/Needs_Action`, `/Done`, `/Pending_Approval`, `/Logs`
 2. Create `Dashboard.md` from template — see [references/dashboard-template.md](references/dashboard-template.md)
 3. Create `Company_Handbook.md` from template — see [references/handbook-template.md](references/handbook-template.md)
-4. Run health check: verify all 7 folders exist + both core files are present and non-empty
+4. Run health check: verify all 5 folders exist + both core files are present and non-empty (7 items total)
 
 **On failure:** Log error, report which items are missing, and offer to create them.
 
@@ -50,7 +50,7 @@ Process every file in `/Inbox/` using classification and priority assessment.
 
 Rebuild `Dashboard.md` from actual vault state. **Never use cached values.**
 
-1. **Count files** in each folder by reading directory contents
+1. **Count files** in each Bronze Tier folder (Inbox, Needs_Action, Done, Pending_Approval, Logs) by reading directory contents
 2. **Build sections:**
    - Pending Actions — list all items from `/Needs_Action/`
    - Recently Completed — last 10 items from `/Done/` by date
@@ -66,7 +66,7 @@ Full template: [references/dashboard-template.md](references/dashboard-template.
 When a task is marked `[x]` or user says a task is done:
 
 1. **Move** source file from `/Inbox/` → `/Done/`
-2. **Move** any related files from `/Plans/` → `/Done/`
+2. **Remove** the task entry from `/Needs_Action/`
 3. **Remove** the task from Dashboard "Pending Actions"
 4. **Add** to Dashboard "Recently Completed" (prepend, keep max 10)
 5. **Recalculate** all Dashboard stats from actual folder counts
