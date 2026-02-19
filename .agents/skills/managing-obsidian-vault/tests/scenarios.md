@@ -9,9 +9,9 @@
 **Expected behaviors:**
 
 1. Create folder structure
-   - **Minimum:** All 7 folders created (Inbox, Needs_Action, Done, Plans, Pending_Approval, Approved, Logs)
-   - **Quality criteria:** Folders created in a single operation, no partial state left on error
-   - **Haiku pitfall:** May forget Approved or Logs folders
+   - **Minimum:** All 5 Bronze Tier folders created (Inbox, Needs_Action, Done, Pending_Approval, Logs)
+   - **Quality criteria:** Folders created in a single operation using `mkdir -p`, no partial state left on error. Plans/ and Approved/ are Silver+ and MUST NOT be created.
+   - **Haiku pitfall:** May create Silver+ folders (Plans, Approved) or forget Pending_Approval
    - **Weight:** 5
 
 2. Create Dashboard.md
@@ -28,7 +28,7 @@
 
 4. Run health check
    - **Minimum:** Reports that vault is initialized
-   - **Quality criteria:** Explicitly verifies each folder and file, reports count (7 folders + 2 files = 9 items verified)
+   - **Quality criteria:** Explicitly verifies each folder and file, reports count (5 folders + 2 files = 7 items verified)
    - **Haiku pitfall:** May skip verification step entirely
    - **Weight:** 3
 
@@ -205,3 +205,54 @@ There's an invoice reference here too.
 **Output validation:**
 - Pattern: `warning|file_drop|no frontmatter` in log file
 - Dashboard.md updated timestamp within current session
+
+---
+
+## Scenario: Bronze Tier Full Lifecycle
+
+**Difficulty:** Medium
+
+**Purpose:** Verify complete Bronze Tier compliance — initialize with only Bronze folders, triage one email, complete the task, verify all artifacts.
+
+**Setup:** Empty directory (no vault exists).
+
+**Query sequence:**
+1. "Set up my AI employee vault at [empty-dir]"
+2. Place one file: `Inbox/client-invoice.md` with frontmatter `type: email`, body: "URGENT: Invoice #5678 payment overdue. Please process immediately."
+3. "Process my inbox"
+4. "I finished the invoice task"
+5. "What actions were taken today?"
+
+**Expected behaviors:**
+
+1. Vault initialization (Bronze Tier only)
+   - **Minimum:** 5 folders created (Inbox, Needs_Action, Done, Pending_Approval, Logs) — NOT Plans or Approved
+   - **Quality criteria:** Dashboard.md with empty-state messages, Company_Handbook.md with Bronze Tier rules, health check reports "7 items verified", audit log entry with action: create
+   - **Haiku pitfall:** May create 7 folders including Silver+ tier folders
+   - **Weight:** 5
+
+2. Triage classifies as #high actionable
+   - **Minimum:** File routed to /Needs_Action/ as #high
+   - **Quality criteria:** Handbook read first, keywords "urgent" + "invoice" + "payment" matched, entry created with correct format, audit log with rationale
+   - **Weight:** 5
+
+3. Task completion moves files correctly
+   - **Minimum:** Source moved to /Done/, Needs_Action entry removed
+   - **Quality criteria:** Dashboard updated (0 pending, 1 done), audit log with action: complete
+   - **Weight:** 5
+
+4. Audit log review shows all operations
+   - **Minimum:** All actions listed with timestamps
+   - **Quality criteria:** Chronological entries: create (init), triage (#high), update_dashboard, complete, update_dashboard — all valid schema
+   - **Weight:** 4
+
+5. No Silver/Gold tier leakage
+   - **Minimum:** No /Plans/ or /Approved/ folders exist
+   - **Quality criteria:** Zero external API references, zero autonomous loops, all operations human-triggered
+   - **Weight:** 5
+
+**Output validation:**
+- `ls` shows exactly 5 folders + 2 core files
+- `/Plans/` and `/Approved/` do NOT exist
+- Log file has >= 4 entries, all valid JSON with ISO-8601 timestamps
+- Dashboard Stats show correct counts for 5 Bronze folders only

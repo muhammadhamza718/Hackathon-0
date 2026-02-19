@@ -48,7 +48,7 @@ vault-root/
 
 ### `/Done/`
 - **Purpose:** Archive of completed and informational items
-- **Contents:** All processed files from Inbox, completed Plans
+- **Contents:** All processed files from Inbox (Bronze Tier); completed Plans at Silver+ Tier
 - **Retention:** Indefinite unless user specifies cleanup policy
 
 ### `/Plans/` [Silver+]

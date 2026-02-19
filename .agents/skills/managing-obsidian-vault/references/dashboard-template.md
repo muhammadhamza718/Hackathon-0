@@ -38,12 +38,10 @@ Full template for `Dashboard.md` with all required sections.
 | Inbox | N |
 | Needs_Action | N |
 | Done | N |
-| Plans | N |
 | Pending_Approval | N |
-| Approved | N |
 | Logs | N |
 
-> Counts reflect actual folder contents at time of update
+> Counts reflect actual folder contents at time of update (Bronze Tier folders only)
 
 ---
 
@@ -73,7 +71,7 @@ Full template for `Dashboard.md` with all required sections.
 - Format: Table row per item with wiki-link, summary, completion date
 
 ### Stats
-- Source: Count files in each of the 7 folders
+- Source: Count files in each of the 5 Bronze Tier folders (Inbox, Needs_Action, Done, Pending_Approval, Logs)
 - Method: **Always count actual files**, never cache or estimate
 - Format: Simple two-column table
 
@@ -104,6 +102,16 @@ When a section has no items, display:
 ## Recently Completed
 
 > No completed items yet.
+
+## Stats
+
+| Folder | Count |
+|--------|-------|
+| Inbox | 0 |
+| Needs_Action | 0 |
+| Done | 0 |
+| Pending_Approval | 0 |
+| Logs | 0 |
 
 ## Alerts
 

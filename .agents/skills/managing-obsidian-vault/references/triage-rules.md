@@ -47,12 +47,24 @@ Applied when:
 - Involves a financial transaction
 - Needs a decision
 
+**Examples of actionable items:**
+- "Please review the Q1 report by Friday" → actionable (#medium, has deadline)
+- "URGENT: Invoice #1234 is overdue" → actionable (#high, financial + deadline)
+- "Can we schedule a meeting next week?" → actionable (#medium, request)
+- "What's the status of Project X?" → actionable (#medium, question)
+
 **Informational** (→ `/Done/`):
 - FYI / notification only
 - Newsletter or digest
 - Confirmation of completed action
 - Read receipt or acknowledgment
 - No response or action needed
+
+**Examples of informational items:**
+- "Weekly Tech Roundup — No action required" → informational (#low)
+- "FYI: Office will be closed Monday" → informational (#low)
+- "Your order has shipped" → informational (#low, confirmation)
+- "Meeting notes from yesterday's standup" → informational (#low, FYI)
 
 ## Frontmatter Type Handling
 

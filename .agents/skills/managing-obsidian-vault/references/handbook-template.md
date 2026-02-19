@@ -2,6 +2,11 @@
 
 Starter template for `Company_Handbook.md` with default rules for a Bronze Tier Digital FTE.
 
+## Table of Contents
+
+- [Template](#template)
+- [Customization Notes](#customization-notes)
+
 ## Template
 
 ```markdown
@@ -67,7 +72,6 @@ Starter template for `Company_Handbook.md` with default rules for a Bronze Tier 
 - Move files between vault folders
 - Update Dashboard.md
 - Write audit logs
-- Create plans in /Plans/
 - Create approval requests in /Pending_Approval/
 - Summarize and organize information
 
@@ -94,8 +98,8 @@ Starter template for `Company_Handbook.md` with default rules for a Bronze Tier 
 - Maintain audit logs
 - Update Dashboard
 
-### Upgrade Path
-- Silver Tier: Can send pre-approved email templates
+### Upgrade Path *(aspirational — not active at Bronze Tier)*
+- Silver Tier: Can send pre-approved email templates, /Plans/ and /Approved/ folders enabled
 - Gold Tier: Can make small purchases under threshold
 - Platinum Tier: Full autonomous operation with audit trail
 

@@ -2,6 +2,13 @@
 
 JSON schema and examples for `/Logs/YYYY-MM-DD.json` files.
 
+## Table of Contents
+
+- [File Naming](#file-naming)
+- [Entry Schema](#entry-schema)
+- [Examples](#examples)
+- [Read/Write Procedure](#readwrite-procedure)
+
 ## File Naming
 
 - One file per day: `YYYY-MM-DD.json` (e.g., `2026-02-19.json`)
@@ -68,7 +75,7 @@ JSON schema and examples for `/Logs/YYYY-MM-DD.json` files.
     "timestamp": "2026-02-19T09:00:15Z",
     "action": "triage",
     "source_file": "Inbox/newsletter-weekly.md",
-    "details": "Triaged newsletter. No actionable content. Moved to Done.",
+    "details": "Triaged newsletter. Rationale: no priority keywords matched, content is informational only. Classified as #low informational. Routed to Done/.",
     "result": "success"
   },
   {
