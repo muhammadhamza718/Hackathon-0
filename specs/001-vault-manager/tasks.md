@@ -217,7 +217,7 @@
 
 **Purpose**: Final cleanup for submission readiness
 
-- [ ] T035 [P] Add README.md to skill directory with: overview, file structure explanation, installation notes, tests/scenarios.md purpose at `.agents/skills/managing-obsidian-vault/README.md`
+- [x] T035 [P] Add README.md to skill directory with: overview, file structure explanation, installation notes, tests/scenarios.md purpose at `.agents/skills/managing-obsidian-vault/README.md`
 - [x] T036 [P] Add table of contents to `references/log-format.md` (file exceeds 100 lines per review finding) at `.agents/skills/managing-obsidian-vault/references/log-format.md`
 - [x] T037 [P] Add table of contents to `references/handbook-template.md` (file exceeds 100 lines per review finding) at `.agents/skills/managing-obsidian-vault/references/handbook-template.md`
 - [x] T038 Update `tests/scenarios.md` to add Bronze-specific scenario: "Initialize vault with only Bronze Tier folders, triage one email file, verify full lifecycle" at `.agents/skills/managing-obsidian-vault/tests/scenarios.md`
