@@ -198,7 +198,7 @@
 
 - [x] T031 [P] Run Bronze Law audit: grep all skill files for external API references (curl, fetch, http, https, request, api.*, smtp, webhook) — confirm zero matches at `.agents/skills/managing-obsidian-vault/`
 - [x] T032 [P] Verify no autonomous loop patterns in SKILL.md: grep for "while", "repeat", "loop", "poll", "watch", "cron", "schedule" — all operations must be human-triggered at `.agents/skills/managing-obsidian-vault/SKILL.md`
-- [ ] T033 Run full Green Path end-to-end test:
+- [x] T033 Run full Green Path end-to-end test:
   1. Initialize empty vault → verify 5 folders + 2 core files
   2. Place 3 test files in /Inbox/ (urgent email, meeting request, newsletter)
   3. Triage → verify 2 in /Needs_Action/, 1 in /Done/
