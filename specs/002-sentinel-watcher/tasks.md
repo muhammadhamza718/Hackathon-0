@@ -15,12 +15,12 @@
 
 **Purpose**: Project initialization and basic structure. All projects begin here.
 
-- [ ] T001 Initialize Python 3.10+ project with `uv init --package sentinel` at repository root
-- [ ] T002 Create `pyproject.toml` with project metadata, `watchdog` and `python-dotenv` dependencies, and CLI entry point `[project.scripts] sentinel = "sentinel.cli:main"`
-- [ ] T003 [P] Create `.env.example` with template variables: `WATCH_DIRECTORY`, `VAULT_INBOX_PATH`, `STABILITY_SECONDS`, `LOG_LEVEL`
-- [ ] T004 Create `.gitignore` with Python patterns: `__pycache__/`, `.venv/`, `*.pyc`, `.env` (local only), `sentinel.log`
-- [ ] T005 [P] Create project directories: `src/sentinel/`, `tests/`, `tests/fixtures/`
-- [ ] T006 Create `src/sentinel/__init__.py` with `__version__ = "0.1.0"`
+- [x] T001 Initialize Python 3.10+ project with `uv init --package sentinel` at repository root
+- [x] T002 Create `pyproject.toml` with project metadata, `watchdog` and `python-dotenv` dependencies, and CLI entry point `[project.scripts] sentinel = "sentinel.cli:main"`
+- [x] T003 [P] Create `.env.example` with template variables: `WATCH_DIRECTORY`, `VAULT_INBOX_PATH`, `STABILITY_SECONDS`, `LOG_LEVEL`
+- [x] T004 Create `.gitignore` with Python patterns: `__pycache__/`, `.venv/`, `*.pyc`, `.env` (local only), `sentinel.log`
+- [x] T005 [P] Create project directories: `src/sentinel/`, `tests/`, `tests/fixtures/`
+- [x] T006 Create `src/sentinel/__init__.py` with `__version__ = "0.1.0"`
 
 **Checkpoint**: Project scaffolding complete. Dependencies declarable.
 
@@ -32,12 +32,12 @@
 
 ⚠️ **CRITICAL**: No user story work can begin until this phase is complete.
 
-- [ ] T007 Implement `src/sentinel/config.py`: `WatcherConfig` dataclass with fields from `.env` (WATCH_DIRECTORY, VAULT_INBOX_PATH, STABILITY_SECONDS, ALLOWED_EXTENSIONS, LOG_LEVEL); load via `load_from_env()` function using `python-dotenv`
-- [ ] T008 Implement `src/sentinel/config.py`: Add validation in `WatcherConfig.__post_init__()` — fail if WATCH_DIRECTORY or VAULT_INBOX_PATH missing; convert to `Path` objects; validate STABILITY_SECONDS >= 1.0
-- [ ] T009 Create `tests/test_config.py`: Test loading from `.env`, defaults for optional fields, validation errors for missing required paths
-- [ ] T010 Implement `src/sentinel/base.py`: Abstract base class `BaseWatcher` with abstract methods `start() -> None`, `stop() -> None`, `on_new_item(path: Path) -> None`; add properties `name: str` and `is_running: bool`
-- [ ] T011 Implement `src/sentinel/logging.py`: Configure Python `logging` with `StreamHandler` (console) and optional `FileHandler` (sentinel.log outside vault); use ISO-8601 timestamp format in logs
-- [ ] T012 Implement `src/sentinel/__main__.py` and `src/sentinel/cli.py`: Entry point that loads `.env` via `WatcherConfig`, instantiates `FileSystemWatcher`, and calls `start()`; handle `KeyboardInterrupt` for graceful shutdown
+- [x] T007 Implement `src/sentinel/config.py`: `WatcherConfig` dataclass with fields from `.env` (WATCH_DIRECTORY, VAULT_INBOX_PATH, STABILITY_SECONDS, ALLOWED_EXTENSIONS, LOG_LEVEL); load via `load_from_env()` function using `python-dotenv`
+- [x] T008 Implement `src/sentinel/config.py`: Add validation in `WatcherConfig.__post_init__()` — fail if WATCH_DIRECTORY or VAULT_INBOX_PATH missing; convert to `Path` objects; validate STABILITY_SECONDS >= 1.0
+- [x] T009 Create `tests/test_config.py`: Test loading from `.env`, defaults for optional fields, validation errors for missing required paths
+- [x] T010 Implement `src/sentinel/base.py`: Abstract base class `BaseWatcher` with abstract methods `start() -> None`, `stop() -> None`, `on_new_item(path: Path) -> None`; add properties `name: str` and `is_running: bool`
+- [x] T011 Implement `src/sentinel/logging.py`: Configure Python `logging` with `StreamHandler` (console) and optional `FileHandler` (sentinel.log outside vault); use ISO-8601 timestamp format in logs
+- [x] T012 Implement `src/sentinel/__main__.py` and `src/sentinel/cli.py`: Entry point that loads `.env` via `WatcherConfig`, instantiates `FileSystemWatcher`, and calls `start()`; handle `KeyboardInterrupt` for graceful shutdown
 
 **Checkpoint**: Foundation ready — user story implementation can now begin in parallel.
 
@@ -51,17 +51,17 @@
 
 ### Implementation for User Story 1
 
-- [ ] T013 [P] [US1] Implement `src/sentinel/filesystem.py`: `FileSystemWatcher` class extending `BaseWatcher` with `__init__(config: WatcherConfig)` storing config, pending set (dedup), processing queue (stability check + move workers)
-- [ ] T014 [P] [US1] Implement watchdog observer in `FileSystemWatcher.start()`: Create `watchdog.observers.Observer`, create custom `EventHandler(FileSystemEventHandler)` with `on_created(event)` that filters directories, checks ignore patterns, enqueues ready-to-check paths
-- [ ] T015 [P] [US1] Implement ignore pattern check in `FileSystemWatcher._is_ignored(path: Path) -> bool`: Return `True` for `.tmp`, `.~lock`, dot-files (leading `.`), and `~` prefix files
-- [ ] T016 [P] [US1] Implement extension filter in `FileSystemWatcher._is_allowed(path: Path) -> bool`: Check extension against `config.allowed_extensions` (default: `.md,.txt,.pdf,.jpg,.jpeg,.png`)
-- [ ] T017 [US1] Implement stability check in `FileSystemWatcher._wait_for_stability(path: Path, timeout: float = 10.0) -> bool`: Poll file size every 1 second; return `True` if size unchanged for `config.stability_seconds` consecutive checks (default 2 checks = 2 seconds); log each poll attempt; timeout after 10 seconds
-- [ ] T018 [US1] Implement file move in `FileSystemWatcher._move_to_inbox(source: Path) -> Path`: Move `source` to `config.vault_inbox_path / source.name`; if collision exists, resolve with timestamp suffix before extension (e.g., `report_20260220T120000.md`); return destination path
-- [ ] T019 [US1] Implement collision resolution in `FileSystemWatcher._resolve_collision(dest: Path) -> Path`: If `dest` exists, append `_YYYYMMDDTHHMMSS` before extension; return new path; do NOT overwrite
-- [ ] T020 [US1] Implement worker thread in `FileSystemWatcher.start()`: Spawn background thread reading from processing queue; call stability check → move → log for each item; handle exceptions (log, continue, do not crash)
-- [ ] T021 [US1] Implement graceful shutdown in `FileSystemWatcher.stop()`: Signal observer to stop, join observer thread, drain processing queue by waiting for all pending moves to complete, log shutdown summary
-- [ ] T022 [US1] Add logging: Every event (detected, moved, skipped, error) logged with timestamp and clear description; use `logging.info()`, `logging.debug()` for normal flow, `logging.error()` for failures
-- [ ] T023 [US1] Create `tests/test_filesystem.py`: Unit tests for file detection, stability check (mock time + file size), file move, collision handling; use `tmp_path` pytest fixture for isolated source/inbox directories
+- [x] T013 [P] [US1] Implement `src/sentinel/filesystem.py`: `FileSystemWatcher` class extending `BaseWatcher` with `__init__(config: WatcherConfig)` storing config, pending set (dedup), processing queue (stability check + move workers)
+- [x] T014 [P] [US1] Implement watchdog observer in `FileSystemWatcher.start()`: Create `watchdog.observers.Observer`, create custom `EventHandler(FileSystemEventHandler)` with `on_created(event)` that filters directories, checks ignore patterns, enqueues ready-to-check paths
+- [x] T015 [P] [US1] Implement ignore pattern check in `FileSystemWatcher._is_ignored(path: Path) -> bool`: Return `True` for `.tmp`, `.~lock`, dot-files (leading `.`), and `~` prefix files
+- [x] T016 [P] [US1] Implement extension filter in `FileSystemWatcher._is_allowed(path: Path) -> bool`: Check extension against `config.allowed_extensions` (default: `.md,.txt,.pdf,.jpg,.jpeg,.png`)
+- [x] T017 [US1] Implement stability check in `FileSystemWatcher._wait_for_stability(path: Path, timeout: float = 10.0) -> bool`: Poll file size every 1 second; return `True` if size unchanged for `config.stability_seconds` consecutive checks (default 2 checks = 2 seconds); log each poll attempt; timeout after 10 seconds
+- [x] T018 [US1] Implement file move in `FileSystemWatcher._move_to_inbox(source: Path) -> Path`: Move `source` to `config.vault_inbox_path / source.name`; if collision exists, resolve with timestamp suffix before extension (e.g., `report_20260220T120000.md`); return destination path
+- [x] T019 [US1] Implement collision resolution in `FileSystemWatcher._resolve_collision(dest: Path) -> Path`: If `dest` exists, append `_YYYYMMDDTHHMMSS` before extension; return new path; do NOT overwrite
+- [x] T020 [US1] Implement worker thread in `FileSystemWatcher.start()`: Spawn background thread reading from processing queue; call stability check → move → log for each item; handle exceptions (log, continue, do not crash)
+- [x] T021 [US1] Implement graceful shutdown in `FileSystemWatcher.stop()`: Signal observer to stop, join observer thread, drain processing queue by waiting for all pending moves to complete, log shutdown summary
+- [x] T022 [US1] Add logging: Every event (detected, moved, skipped, error) logged with timestamp and clear description; use `logging.info()`, `logging.debug()` for normal flow, `logging.error()` for failures
+- [x] T023 [US1] Create `tests/test_filesystem.py`: Unit tests for file detection, stability check (mock time + file size), file move, collision handling; use `tmp_path` pytest fixture for isolated source/inbox directories
 
 **Checkpoint**: User Story 1 (P1) complete. MVP: files drop → detect → stabilize → move → log. Ready to verify in test environment.
 
@@ -75,11 +75,11 @@
 
 ### Implementation for User Story 2
 
-- [ ] T024 [P] [US2] Implement `src/sentinel/sidecar.py`: Function `generate_sidecar(source: Path, dest: Path, config: WatcherConfig) -> Path` that creates sidecar `.md` file alongside binary in inbox
-- [ ] T025 [P] [US2] Implement sidecar template in `src/sentinel/sidecar.py`: YAML frontmatter with fields `original_filename`, `source_path`, `file_size_bytes`, `ingestion_timestamp` (ISO-8601), `file_extension`; markdown body with human-readable summary
-- [ ] T026 [US2] Integrate sidecar generation into `FileSystemWatcher._move_to_inbox()` (from US1): After successful move, check if source extension is NOT `.md`; if non-markdown, call `generate_sidecar(source, dest, config)` and log sidecar creation
-- [ ] T027 [US2] Implement zero-sidecar rule in `_move_to_inbox()`: Do NOT generate sidecar for `.md` files (they are self-describing); log as skipped
-- [ ] T028 [US2] Create `tests/test_sidecar.py`: Unit tests for sidecar generation — verify YAML frontmatter correctness, metadata fields, markdown body content; test for `.pdf`, `.jpg`, `.txt`; verify no sidecar for `.md`
+- [x] T024 [P] [US2] Implement `src/sentinel/sidecar.py`: Function `generate_sidecar(source: Path, dest: Path, config: WatcherConfig) -> Path` that creates sidecar `.md` file alongside binary in inbox
+- [x] T025 [P] [US2] Implement sidecar template in `src/sentinel/sidecar.py`: YAML frontmatter with fields `original_filename`, `source_path`, `file_size_bytes`, `ingestion_timestamp` (ISO-8601), `file_extension`; markdown body with human-readable summary
+- [x] T026 [US2] Integrate sidecar generation into `FileSystemWatcher._move_to_inbox()` (from US1): After successful move, check if source extension is NOT `.md`; if non-markdown, call `generate_sidecar(source, dest, config)` and log sidecar creation
+- [x] T027 [US2] Implement zero-sidecar rule in `_move_to_inbox()`: Do NOT generate sidecar for `.md` files (they are self-describing); log as skipped
+- [x] T028 [US2] Create `tests/test_sidecar.py`: Unit tests for sidecar generation — verify YAML frontmatter correctness, metadata fields, markdown body content; test for `.pdf`, `.jpg`, `.txt`; verify no sidecar for `.md`
 
 **Checkpoint**: User Story 2 (P2) complete. Binary files now visible to agent triage via sidecars.
 
@@ -93,11 +93,11 @@
 
 ### Implementation for User Story 3
 
-- [ ] T029 [P] [US3] Implement directory validation in `FileSystemWatcher.start()`: Check if `config.watch_directory` exists and is readable; if not, log error and either auto-create (if createable) or fail with clear message; check if `config.vault_inbox_path` exists and is writable; fail-fast if inbox missing
-- [ ] T030 [P] [US3] Implement I/O error handling in worker thread (T020 callback): Wrap file move in try/except; on exception, log error with traceback, remove path from pending set, continue processing next item (do NOT crash)
-- [ ] T031 [P] [US3] Implement re-attachment logic: If inbox becomes inaccessible during processing, catch exception, log "Inbox temporarily unavailable", remove from pending, retry on next `on_created` event (exponential backoff optional but not required)
-- [ ] T032 [US3] Create `tests/test_ignore.py`: Unit tests for ignore patterns — verify `.tmp`, `.~lock`, dot-files, `~` prefix are skipped; verify no sidecar or move attempt for these
-- [ ] T033 [US3] Create `tests/test_robustness.py`: Integration test for directory validation, I/O error recovery, continuous operation without crash for 5 mock file sequences
+- [x] T029 [P] [US3] Implement directory validation in `FileSystemWatcher.start()`: Check if `config.watch_directory` exists and is readable; if not, log error and either auto-create (if createable) or fail with clear message; check if `config.vault_inbox_path` exists and is writable; fail-fast if inbox missing
+- [x] T030 [P] [US3] Implement I/O error handling in worker thread (T020 callback): Wrap file move in try/except; on exception, log error with traceback, remove path from pending set, continue processing next item (do NOT crash)
+- [x] T031 [P] [US3] Implement re-attachment logic: If inbox becomes inaccessible during processing, catch exception, log "Inbox temporarily unavailable", remove from pending, retry on next `on_created` event (exponential backoff optional but not required)
+- [x] T032 [US3] Create `tests/test_ignore.py`: Unit tests for ignore patterns — verify `.tmp`, `.~lock`, dot-files, `~` prefix are skipped; verify no sidecar or move attempt for these
+- [x] T033 [US3] Create `tests/test_robustness.py`: Integration test for directory validation, I/O error recovery, continuous operation without crash for 5 mock file sequences
 
 **Checkpoint**: User Story 3 (P3) complete. Sentinel robust enough for unattended operation.
 
@@ -111,9 +111,9 @@
 
 ### Implementation for User Story 4
 
-- [ ] T034 [US4] Verify `BaseWatcher` ABC (from T010) has all required abstract methods documented with docstrings: `start()`, `stop()`, `on_new_item()`; add `name` and `is_running` properties to contract
-- [ ] T035 [US4] Create `tests/test_base_watcher.py`: Verify `FileSystemWatcher` correctly implements `BaseWatcher` — all abstract methods present, callable, and return correct types; instantiate and verify `is_running` behavior
-- [ ] T036 [US4] Create stub/example class in `tests/fixtures/mock_watcher.py`: `MockWatcher(BaseWatcher)` that implements all abstract methods with no-ops; verify it can be instantiated without error (proves interface is extensible)
+- [x] T034 [US4] Verify `BaseWatcher` ABC (from T010) has all required abstract methods documented with docstrings: `start()`, `stop()`, `on_new_item()`; add `name` and `is_running` properties to contract
+- [x] T035 [US4] Create `tests/test_base_watcher.py`: Verify `FileSystemWatcher` correctly implements `BaseWatcher` — all abstract methods present, callable, and return correct types; instantiate and verify `is_running` behavior
+- [x] T036 [US4] Create stub/example class in `tests/fixtures/mock_watcher.py`: `MockWatcher(BaseWatcher)` that implements all abstract methods with no-ops; verify it can be instantiated without error (proves interface is extensible)
 
 **Checkpoint**: User Story 4 (P4) complete. Architecture future-proofed for Silver Tier watchers.
 
@@ -123,15 +123,15 @@
 
 **Purpose**: Robustness, documentation, and final verification.
 
-- [ ] T037 [P] Add docstrings to all public methods and classes: Sphinx-style or Google-style (consistent throughout)
-- [ ] T038 [P] Add type hints to all function signatures and return types; use `Path`, `bool`, `Optional[str]`, `Callable` from `typing` and `pathlib`
-- [ ] T039 [P] Verify all logging uses ISO-8601 format for timestamps (check `logging.Formatter` config)
-- [ ] T040 Implement `tests/conftest.py`: Pytest fixtures for temp source/inbox directories, mock config, cleanup on test teardown
-- [ ] T041 Create end-to-end test `tests/test_e2e.py`: Start sentinel, create real `.md` file in source, wait ≤5 seconds, verify in inbox, create `.pdf` file, verify sidecar, verify continuous operation for 30 seconds without crash
-- [ ] T042 [P] Verify no external API calls: Grep `src/sentinel/` for `http`, `requests`, `urllib`, `boto`, `google.cloud`; confirm zero matches (Bronze Law I compliance check)
-- [ ] T043 [P] Update `src/sentinel/__init__.py` with public exports: `__version__`, `BaseWatcher`, `FileSystemWatcher`, `WatcherConfig`
-- [ ] T044 Test graceful shutdown: Start sentinel, send SIGINT (Ctrl+C), verify observer stops cleanly, queue drains, log shows "Shutdown complete"
-- [ ] T045 Manual verification: Run `uv run sentinel` with real drop folder + vault, drop 3 files (`.md`, `.txt`, `.pdf`), verify all appear in inbox within 5s with sidecars; check console logs for correct format
+- [x] T037 [P] Add docstrings to all public methods and classes: Sphinx-style or Google-style (consistent throughout)
+- [x] T038 [P] Add type hints to all function signatures and return types; use `Path`, `bool`, `Optional[str]`, `Callable` from `typing` and `pathlib`
+- [x] T039 [P] Verify all logging uses ISO-8601 format for timestamps (check `logging.Formatter` config)
+- [x] T040 Implement `tests/conftest.py`: Pytest fixtures for temp source/inbox directories, mock config, cleanup on test teardown
+- [x] T041 Create end-to-end test `tests/test_e2e.py`: Start sentinel, create real `.md` file in source, wait ≤5 seconds, verify in inbox, create `.pdf` file, verify sidecar, verify continuous operation for 30 seconds without crash
+- [x] T042 [P] Verify no external API calls: Grep `src/sentinel/` for `http`, `requests`, `urllib`, `boto`, `google.cloud`; confirm zero matches (Bronze Law I compliance check)
+- [x] T043 [P] Update `src/sentinel/__init__.py` with public exports: `__version__`, `BaseWatcher`, `FileSystemWatcher`, `WatcherConfig`
+- [x] T044 Test graceful shutdown: Start sentinel, send SIGINT (Ctrl+C), verify observer stops cleanly, queue drains, log shows "Shutdown complete"
+- [x] T045 Manual verification: Run `uv run sentinel` with real drop folder + vault, drop 3 files (`.md`, `.txt`, `.pdf`), verify all appear in inbox within 5s with sidecars; check console logs for correct format
 
 **Checkpoint**: All 45 tasks complete. Sentinel ready for integration test with agent triage.
 
