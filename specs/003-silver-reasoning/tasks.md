@@ -34,7 +34,7 @@ description: "Task list for Silver Tier Reasoning & Planning System implementati
 
 ### 1.1 Plan.md Template & Schema
 
-- [ ] T001 Create `references/plan-template.md` with rigid schema: YAML frontmatter + Markdown sections
+- [x] T001 Create `references/plan-template.md` with rigid schema: YAML frontmatter + Markdown sections
 
 **Details**: File must include:
 - YAML fields: `task_id`, `source_link`, `created_date`, `priority`, `status`, `blocked_reason`
@@ -45,19 +45,19 @@ description: "Task list for Silver Tier Reasoning & Planning System implementati
 
 ### 1.2 Vault Folder Structure
 
-- [ ] T002 [P] Create `/Plans/` folder for active and draft plans
-- [ ] T003 [P] Create `/Done/Plans/` folder for archived completed plans
-- [ ] T004 [P] Create `/Pending_Approval/` folder for approval request files (if not already present from Bronze Tier)
-- [ ] T005 [P] Create `/Approved/` folder for approved actions (temporary staging)
-- [ ] T006 [P] Create `/Rejected/` folder for rejected actions (audit trail)
+- [x] T002 [P] Create `/Plans/` folder for active and draft plans
+- [x] T003 [P] Create `/Done/Plans/` folder for archived completed plans
+- [x] T004 [P] Create `/Pending_Approval/` folder for approval request files (if not already present from Bronze Tier)
+- [x] T005 [P] Create `/Approved/` folder for approved actions (temporary staging)
+- [x] T006 [P] Create `/Rejected/` folder for rejected actions (audit trail)
 
 ---
 
 ### 1.3 Agent & Skill Documentation
 
-- [ ] T007 [P] Create `agents/silver-reasoning-agent.md` documenting Silver Tier agent behavior and Reconciliation-First startup
-- [ ] T008 Create approval request template file: `references/approval-request-template.md`
-- [ ] T009 Create reasoning log entry template file: `references/reasoning-log-template.md`
+- [x] T007 [P] Create `agents/silver-reasoning-agent.md` documenting Silver Tier agent behavior and Reconciliation-First startup
+- [x] T008 Create approval request template file: `references/approval-request-template.md`
+- [x] T009 Create reasoning log entry template file: `references/reasoning-log-template.md`
 
 ---
 
