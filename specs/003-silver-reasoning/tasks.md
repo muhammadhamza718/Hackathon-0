@@ -75,25 +75,25 @@ description: "Task list for Silver Tier Reasoning & Planning System implementati
 
 ### 2.1 PlanManager Core Implementation
 
-- [ ] T010 [P] Implement `PlanManager.create_plan()` function to create new Plan.md from template with valid schema
-  - File: `agents/skills/managing-obsidian-vault/plan-manager.md`
+- [x] T010 [P] Implement `PlanManager.create_plan()` function to create new Plan.md from template with valid schema
+  - File: `agents/skills/managing-obsidian-vault/plan-manager.py`
   - Inputs: task_id, objective, context, steps, priority
   - Output: Creates `/Plans/PLAN-<task_id>.md` with filled YAML + markdown
 
-- [ ] T011 [P] Implement `PlanManager.load_plan()` function to read and parse existing Plan.md
-  - File: `agents/skills/managing-obsidian-vault/plan-manager.md`
+- [x] T011 [P] Implement `PlanManager.load_plan()` function to read and parse existing Plan.md
+  - File: `agents/skills/managing-obsidian-vault/plan-manager.py`
   - Inputs: plan_id
   - Output: Parsed plan object (metadata + sections)
   - Error handling: Invalid YAML, missing sections
 
-- [ ] T012 [P] Implement `PlanManager.find_active_plan()` function for Reconciliation-First startup
-  - File: `agents/skills/managing-obsidian-vault/plan-manager.md`
+- [x] T012 [P] Implement `PlanManager.find_active_plan()` function for Reconciliation-First startup
+  - File: `agents/skills/managing-obsidian-vault/plan-manager.py`
   - Scan `/Plans/` for incomplete plans
   - Prioritize: Status (Active > Blocked > Draft), then by created_date descending
   - Output: Most relevant plan or null if none found
 
-- [ ] T013 [P] Implement `PlanManager.validate_schema()` function to ensure Plan.md integrity
-  - File: `agents/skills/managing-obsidian-vault/plan-manager.md`
+- [x] T013 [P] Implement `PlanManager.validate_schema()` function to ensure Plan.md integrity
+  - File: `agents/skills/managing-obsidian-vault/plan-manager.py`
   - Check YAML frontmatter completeness
   - Check mandatory sections present
   - Check reasoning logs are ISO-8601 timestamped
@@ -102,7 +102,7 @@ description: "Task list for Silver Tier Reasoning & Planning System implementati
 
 ### 2.2 Session Startup & Reconciliation-First
 
-- [ ] T014 Update agent instructions in `agents/silver-reasoning-agent.md` to include Reconciliation-First startup procedure
+- [x] T014 Update agent instructions in `agents/silver-reasoning-agent.md` to include Reconciliation-First startup procedure
   - Pseudocode:
     ```
     Session Start:
@@ -113,7 +113,7 @@ description: "Task list for Silver Tier Reasoning & Planning System implementati
       5. If no plan found: Begin normal triage flow
     ```
 
-- [ ] T015 Implement session startup logic in agent skill
+- [x] T015 Implement session startup logic in agent skill
   - File: `agents/skills/managing-obsidian-vault/procedures/initialize-session.md`
   - Validate: At every new session, agent calls find_active_plan() before accepting new input
 
@@ -121,14 +121,14 @@ description: "Task list for Silver Tier Reasoning & Planning System implementati
 
 ### 2.3 Complexity Detection
 
-- [ ] T016 [P] Implement complexity detection heuristics in agent instructions
+- [x] T016 [P] Implement complexity detection heuristics in agent instructions
   - File: `agents/silver-reasoning-agent.md` → new section "Complexity Detection"
   - Keywords (high priority): `#high`, `urgent`, `ASAP`, `critical`
   - Keywords (multi-step): `invoice`, `payment`, `client`, `project`, `campaign`, `report`, `audit`, `schedule`
   - Keywords (external action): `send`, `post`, `publish`, `email`, `message`, `call`, `pay`
   - Logic: If ANY keyword detected + multi-step → suggest creating plan
 
-- [ ] T017 Add suggestion logic: Agent recommends "I should create a plan for this" before initializing Plan.md
+- [x] T017 Add suggestion logic: Agent recommends "I should create a plan for this" before initializing Plan.md
   - File: `agents/silver-reasoning-agent.md`
   - User can approve or skip plan creation
 
@@ -136,14 +136,14 @@ description: "Task list for Silver Tier Reasoning & Planning System implementati
 
 ### 2.4 Step Progress Tracking
 
-- [ ] T018 [P] Implement `PlanManager.update_step()` function to mark steps complete
-  - File: `agents/skills/managing-obsidian-vault/plan-manager.md`
+- [x] T018 [P] Implement `PlanManager.update_step()` function to mark steps complete
+  - File: `agents/skills/managing-obsidian-vault/plan-manager.py`
   - Inputs: step_id, status (complete|blocked|skipped), log_entry
   - Updates: Checkbox `[ ]` → `[x]`, appends Reasoning Log entry
   - Atomicity: Entire Plan.md written in one operation
 
-- [ ] T019 Implement `PlanManager.append_reasoning_log()` function
-  - File: `agents/skills/managing-obsidian-vault/plan-manager.md`
+- [x] T019 Implement `PlanManager.append_reasoning_log()` function
+  - File: `agents/skills/managing-obsidian-vault/plan-manager.py`
   - Format: `- [ISO-timestamp] Agent: [action] — [rationale]`
   - Append to `/Plans/PLAN-<id>.md` Reasoning Logs section
 
@@ -151,7 +151,7 @@ description: "Task list for Silver Tier Reasoning & Planning System implementati
 
 ### 2.5 Skill Extension Framework
 
-- [ ] T020 Create Section 8 stub in `agents/skills/managing-obsidian-vault/SKILL.md`
+- [x] T020 Create Section 8 stub in `agents/skills/managing-obsidian-vault/SKILL.md`
   - File: `agents/skills/managing-obsidian-vault/SKILL.md`
   - Add Section 8 header: "Reasoning & Planning (Silver Tier)"
   - List all procedures to be implemented: InitializePlan, UpdatePlanStep, LogReasoning, ArchivePlan, DraftExternalAction, DetectBlocks, ResumePlan, ReconcileDashboard
