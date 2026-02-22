@@ -476,10 +476,37 @@ class PlanManager:
 
     # Private helper methods
 
-    def _write_plan_file(self, path: Path, plan: PlanContent) -> None:
-        """Write PlanContent to markdown file with YAML frontmatter."""
+    def _atomic_write(self, path: Path, content: str) -> None:
+        """
+        Write content to file atomically using temp-file-and-rename pattern.
+
+        Ensures Plan.md files never end up in a corrupted/half-written state.
+
+        Args:
+            path: Target file path
+            content: Content to write
+
+        Raises:
+            IOError: If write or rename fails
+        """
         path.parent.mkdir(parents=True, exist_ok=True)
 
+        # Write to temporary file first
+        temp_path = path.parent / f".{path.name}.tmp"
+
+        try:
+            temp_path.write_text(content, encoding='utf-8')
+            # Atomic rename
+            temp_path.replace(path)
+            logger.debug(f"Atomic write completed: {path}")
+        except IOError as e:
+            # Clean up temp file if rename failed
+            temp_path.unlink(missing_ok=True)
+            logger.error(f"Atomic write failed for {path}: {e}")
+            raise IOError(f"Failed to write plan file {path}: {e}")
+
+    def _write_plan_file(self, path: Path, plan: PlanContent) -> None:
+        """Write PlanContent to markdown file with YAML frontmatter."""
         # Build YAML frontmatter
         yaml_dict = plan.metadata.to_dict()
         yaml_str = yaml.dump(yaml_dict, default_flow_style=False, sort_keys=False)
@@ -515,7 +542,7 @@ class PlanManager:
             lines.append(f"- {log_entry}")
 
         content = "\n".join(lines)
-        path.write_text(content, encoding='utf-8')
+        self._atomic_write(path, content)
 
     def _parse_plan_content(self, content: str) -> PlanContent:
         """Parse markdown content with YAML frontmatter into PlanContent."""
@@ -533,11 +560,11 @@ class PlanManager:
         except yaml.YAMLError as e:
             raise ValueError(f"Invalid YAML frontmatter: {e}")
 
-        # Extract sections
+        # Extract sections (use non-greedy for middle content, greedy for logs since it's the final section)
         objective_match = re.search(r'^# Objective\s*\n\n(.*?)\n## Context', remaining, re.MULTILINE | re.DOTALL)
         context_match = re.search(r'^## Context\s*\n\n(.*?)\n## Roadmap', remaining, re.MULTILINE | re.DOTALL)
         roadmap_match = re.search(r'^## Roadmap\s*\n(.*?)\n## Reasoning Logs', remaining, re.MULTILINE | re.DOTALL)
-        logs_match = re.search(r'^## Reasoning Logs\s*\n(.*?)$', remaining, re.MULTILINE | re.DOTALL)
+        logs_match = re.search(r'^## Reasoning Logs\s*\n(.*)', remaining, re.MULTILINE | re.DOTALL)
 
         objective = objective_match.group(1).strip() if objective_match else ""
         context = context_match.group(1).strip() if context_match else ""
