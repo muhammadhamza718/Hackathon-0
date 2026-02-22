@@ -411,6 +411,69 @@ class PlanManager:
         logger.info(f"Plan archived: {plan_id} -> {dest_path}")
         return dest_path
 
+    def detect_duplicate_plan(self, task_id: str, source_link: Optional[str] = None) -> Optional[PlanContent]:
+        """
+        Detect if a plan already exists for the same task or source.
+
+        Args:
+            task_id: Task identifier to check
+            source_link: Optional source link to check for duplicates
+
+        Returns:
+            Existing PlanContent if duplicate found, None otherwise
+        """
+        if not self.plans_dir.exists():
+            return None
+
+        for plan_file in self.plans_dir.glob("PLAN-*.md"):
+            try:
+                plan = self.load_plan(plan_file.stem)
+
+                # Check for same task_id
+                if plan.metadata.task_id == task_id:
+                    logger.warning(f"Duplicate plan detected: task_id {task_id} already exists")
+                    return plan
+
+                # Check for same source_link
+                if source_link and source_link != "null":
+                    if plan.metadata.source_link == source_link:
+                        logger.warning(f"Duplicate plan detected: source_link {source_link} already exists")
+                        return plan
+
+            except (ValueError, FileNotFoundError) as e:
+                logger.debug(f"Skipping invalid plan during duplicate check {plan_file.stem}: {e}")
+
+        return None
+
+    def merge_plan_steps(self, existing_plan: PlanContent, new_steps: List[str]) -> PlanContent:
+        """
+        Merge new steps into existing plan to avoid duplication.
+
+        Args:
+            existing_plan: Existing PlanContent to merge into
+            new_steps: List of new steps to add
+
+        Returns:
+            Updated PlanContent with merged steps
+        """
+        # Add new steps that don't already exist
+        for step_desc in new_steps:
+            clean_desc = step_desc.replace("✋", "").strip()
+
+            # Check if step already exists
+            if not any(s.description.lower() == clean_desc.lower() for s in existing_plan.steps):
+                hitl = step_desc.startswith("✋")
+                new_step = PlanStep(
+                    number=len(existing_plan.steps) + 1,
+                    description=clean_desc,
+                    completed=False,
+                    hitl_required=hitl
+                )
+                existing_plan.steps.append(new_step)
+
+        logger.info(f"Merged {len(new_steps)} steps into plan {existing_plan.metadata.task_id}")
+        return existing_plan
+
     # Private helper methods
 
     def _write_plan_file(self, path: Path, plan: PlanContent) -> None:
