@@ -360,7 +360,7 @@ description: "Task list for Silver Tier Reasoning & Planning System implementati
 
 ### 5.1 Approval Request Drafting
 
-- [ ] T036 [P] [US3] Implement `DraftExternalAction` procedure in SKILL.md Section 8
+- [x] T036 [P] [US3] Implement `DraftExternalAction` procedure in SKILL.md Section 8
   - File: `agents/skills/managing-obsidian-vault/SKILL.md` (Section 8)
   - Inputs: action_type (email|payment|social|api_call), target_recipient, draft_content, rationale, plan_step_id
   - Process:
@@ -373,7 +373,7 @@ description: "Task list for Silver Tier Reasoning & Planning System implementati
     4. DO NOT proceed with action
   - Output: File path and confirmation message
 
-- [ ] T037 [US3] Add safety gate: Prevent direct MCP action without approval file
+- [x] T037 [US3] Add safety gate: Prevent direct MCP action without approval file
   - File: `agents/silver-reasoning-agent.md` → "External Action Safety" section
   - Rule: Before ANY call to MCP server (email, social, payment), check:
     1. Is this action part of a Plan? (have plan_step_id)
@@ -385,7 +385,7 @@ description: "Task list for Silver Tier Reasoning & Planning System implementati
 
 ### 5.2 Approval Detection & Execution
 
-- [ ] T038 [P] [US3] Implement approval detection logic
+- [x] T038 [P] [US3] Implement approval detection logic
   - File: `agents/skills/managing-obsidian-vault/procedures/detect-approval.md`
   - Process:
     1. Scan `/Pending_Approval/` for files related to current plan
@@ -395,7 +395,7 @@ description: "Task list for Silver Tier Reasoning & Planning System implementati
        - If still in `/Pending_Approval/`: Plan is blocked
   - Output: Approval status (approved|rejected|pending)
 
-- [ ] T039 [US3] Implement approved action execution
+- [x] T039 [US3] Implement approved action execution
   - File: `agents/skills/managing-obsidian-vault/procedures/execute-approved-action.md`
   - Process:
     1. Re-read approval file from `/Approved/` to confirm status
@@ -409,14 +409,14 @@ description: "Task list for Silver Tier Reasoning & Planning System implementati
 
 ### 5.3 Approval Workflow Tests
 
-- [ ] T040 [P] [US3] Test: Approval request file creation
+- [x] T040 [P] [US3] Test: Approval request file creation
   - File: `tests/integration/test-approval-request-creation.py`
   - Trigger: Agent task requires external action (email)
   - Assert: File created in `/Pending_Approval/` with correct name format
   - Assert: File includes draft content, rationale, plan step reference
   - Assert: Email NOT sent immediately
 
-- [ ] T041 [P] [US3] Test: Approval execution on file move
+- [x] T041 [P] [US3] Test: Approval execution on file move
   - File: `tests/integration/test-approval-execution.py`
   - Setup: Approval request file in `/Pending_Approval/`
   - Trigger: Human moves file to `/Approved/`
@@ -425,7 +425,7 @@ description: "Task list for Silver Tier Reasoning & Planning System implementati
   - Assert: Email/action executed
   - Assert: File moved to `/Done/Actions/`
 
-- [ ] T042 [P] [US3] Test: Rejection handling
+- [x] T042 [P] [US3] Test: Rejection handling
   - File: `tests/integration/test-approval-rejection.py`
   - Setup: Approval request file in `/Pending_Approval/`
   - Trigger: Human moves file to `/Rejected/`
@@ -438,13 +438,13 @@ description: "Task list for Silver Tier Reasoning & Planning System implementati
 
 ### 5.4 HITL Marker Implementation
 
-- [ ] T043 [US3] Implement ✋ (HITL) marker detection in agent
+- [x] T043 [US3] Implement ✋ (HITL) marker detection in agent
   - File: `agents/silver-reasoning-agent.md` → "HITL Marker Detection" section
   - Logic: When parsing plan roadmap, identify steps with ✋ emoji
   - For each ✋ step: Mark as "requires human approval before execution"
   - Block execution of ✋ steps until approval file moved to `/Approved/`
 
-- [ ] T044 [US3] Add validation: Cannot mark ✋ step complete without approval reference
+- [x] T044 [US3] Add validation: Cannot mark ✋ step complete without approval reference
   - File: `agents/skills/managing-obsidian-vault/plan-manager.md` → add function `validate_hitl_completion()`
   - Rule: If step has ✋ marker, UpdatePlanStep() must include reference to approved file
   - Prevent: Marking step `[x]` without approval proof
