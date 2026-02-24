@@ -469,7 +469,7 @@ description: "Task list for Silver Tier Reasoning & Planning System implementati
 
 ### 6.1 Dashboard Structure & Templates
 
-- [ ] T045 [P] [US4] Create dashboard template with Current Missions section
+- [x] T045 [P] [US4] Create dashboard template with Current Missions section
   - File: `references/dashboard-template.md`
   - Sections:
     - `⚡ Current Missions`: Active plan ID, objective, status, current step, pending approvals
@@ -477,7 +477,7 @@ description: "Task list for Silver Tier Reasoning & Planning System implementati
     - `🚨 Alerts`: Plans blocked > 24 hours
     - `🕐 Recent Activity`: Last 10 events with timestamps
 
-- [ ] T046 [US4] Modify existing Dashboard.md with new Current Missions section
+- [x] T046 [US4] Modify existing Dashboard.md with new Current Missions section
   - File: `Dashboard.md` (vault root)
   - Add new `⚡ Current Missions` section near top (high visibility)
   - Preserve existing sections (compatibility with Bronze Tier)
@@ -486,7 +486,7 @@ description: "Task list for Silver Tier Reasoning & Planning System implementati
 
 ### 6.2 Dashboard Reconciliation Logic
 
-- [ ] T047 [US4] Implement `ReconcileDashboard` procedure in SKILL.md Section 8
+- [x] T047 [US4] Implement `ReconcileDashboard` procedure in SKILL.md Section 8
   - File: `agents/skills/managing-obsidian-vault/SKILL.md` (Section 8)
   - Process:
     1. Scan `/Plans/` for all plans: extract ID, objective, status, step counts
@@ -499,7 +499,7 @@ description: "Task list for Silver Tier Reasoning & Planning System implementati
   - Output: Confirmation that dashboard updated
   - Trigger: After every significant file operation (plan created, step completed, approval moved, etc.)
 
-- [ ] T048 [US4] Integrate dashboard updates into workflow
+- [x] T048 [US4] Integrate dashboard updates into workflow
   - File: `agents/skills/managing-obsidian-vault/SKILL.md` → Section 3 (Dashboard Updates)
   - Call ReconcileDashboard after: InitializePlan, UpdatePlanStep, DraftExternalAction, ExecuteApprovedAction, ArchivePlan
   - Target latency: < 5 seconds
@@ -508,19 +508,19 @@ description: "Task list for Silver Tier Reasoning & Planning System implementati
 
 ### 6.3 Dashboard Tests
 
-- [ ] T049 [P] [US4] Test: Dashboard reflects current mission
+- [x] T049 [P] [US4] Test: Dashboard reflects current mission
   - File: `tests/integration/test-dashboard-current-mission.py`
   - Setup: Create active plan
   - Assert: Dashboard shows plan objective, status, current step
   - Assert: Information matches `/Plans/` file content
 
-- [ ] T050 [P] [US4] Test: Dashboard shows blocked status
+- [x] T050 [P] [US4] Test: Dashboard shows blocked status
   - File: `tests/integration/test-dashboard-blocked-status.py`
   - Setup: Create plan with ✋ step, create approval file in `/Pending_Approval/`
   - Assert: Dashboard shows status: "Blocked: Awaiting Human Approval"
   - Assert: Displays which step is blocked and what approval is needed
 
-- [ ] T051 [US4] Test: Dashboard real-time updates
+- [x] T051 [US4] Test: Dashboard real-time updates
   - File: `tests/integration/test-dashboard-real-time-update.py`
   - Setup: Dashboard initially empty
   - Trigger: Create plan
