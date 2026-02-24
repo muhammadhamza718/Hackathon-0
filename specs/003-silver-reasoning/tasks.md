@@ -547,7 +547,7 @@ description: "Task list for Silver Tier Reasoning & Planning System implementati
 
 ### 7.1 Block Detection & Status Management
 
-- [ ] T052 [P] [US5] Implement `DetectBlocks` procedure in SKILL.md Section 8
+- [x] T052 [P] [US5] Implement `DetectBlocks` procedure in SKILL.md Section 8
   - File: `agents/skills/managing-obsidian-vault/SKILL.md` (Section 8)
   - Process:
     1. Scan `/Pending_Approval/` for files related to current plan
@@ -565,7 +565,7 @@ description: "Task list for Silver Tier Reasoning & Planning System implementati
        - Add Reasoning Log: "Approval received for [step]. Resuming execution."
   - Output: Block status and reasons
 
-- [ ] T053 [US5] Add block detection to dashboard
+- [x] T053 [US5] Add block detection to dashboard
   - File: `agents/skills/managing-obsidian-vault/SKILL.md` → Section 8 (within ReconcileDashboard)
   - When plan status is "Blocked":
     - Display warning in Current Missions
@@ -576,7 +576,7 @@ description: "Task list for Silver Tier Reasoning & Planning System implementati
 
 ### 7.2 Stalled Task Alerts
 
-- [ ] T054 [US5] Implement 24-hour block threshold alert
+- [x] T054 [US5] Implement 24-hour block threshold alert
   - File: `agents/skills/managing-obsidian-vault/SKILL.md` → Section 8 (within ReconcileDashboard)
   - Process:
     1. For each blocked plan: Calculate time since block began
@@ -584,7 +584,7 @@ description: "Task list for Silver Tier Reasoning & Planning System implementati
     3. Alert format: "⚠️ Plan PLAN-001 blocked for X hours (step: [step desc])"
     4. Include context: "Last approval request: [details]"
 
-- [ ] T055 [US5] Implement block resolution detection
+- [x] T055 [US5] Implement block resolution detection
   - File: `agents/skills/managing-obsidian-vault/procedures/detect-block-resolution.md`
   - Trigger: After approval file moves to `/Approved/`
   - Process:
@@ -597,14 +597,14 @@ description: "Task list for Silver Tier Reasoning & Planning System implementati
 
 ### 7.3 Block Resolution Tests
 
-- [ ] T056 [P] [US5] Test: Block detection when approval pending
+- [x] T056 [P] [US5] Test: Block detection when approval pending
   - File: `tests/integration/test-block-detection.py`
   - Setup: Create plan with ✋ step, create approval file in `/Pending_Approval/`
   - Assert: DetectBlocks identifies plan as blocked
   - Assert: blocked_reason field populated
   - Assert: Dashboard shows "Blocked: Awaiting Human Approval"
 
-- [ ] T057 [P] [US5] Test: Block resolution on approval
+- [x] T057 [P] [US5] Test: Block resolution on approval
   - File: `tests/integration/test-block-resolution.py`
   - Setup: Blocked plan with approval in `/Pending_Approval/`
   - Trigger: Move approval file to `/Approved/`
@@ -613,13 +613,13 @@ description: "Task list for Silver Tier Reasoning & Planning System implementati
   - Assert: Execution resumes from next step
   - Assert: Dashboard updates immediately
 
-- [ ] T058 [P] [US5] Test: 24-hour block alert
+- [x] T058 [P] [US5] Test: 24-hour block alert
   - File: `tests/integration/test-24hr-block-alert.py`
   - Setup: Create blocked plan, simulate 24+ hours passing
   - Assert: Dashboard generates alert in `🚨 Alerts` section
   - Assert: Alert includes plan ID, duration, and context
 
-- [ ] T059 [US5] Test: Multiple concurrent blocked plans
+- [x] T059 [US5] Test: Multiple concurrent blocked plans
   - File: `tests/integration/test-multiple-blocked-plans.py`
   - Setup: Create 3 plans, 2 of which are blocked
   - Assert: Dashboard correctly identifies which plans are blocked
