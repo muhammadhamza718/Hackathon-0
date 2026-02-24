@@ -294,24 +294,43 @@ Please find attached your invoice for January 2026 services...
 
 ### Procedure 8.8: ReconcileDashboard
 
-**Trigger**: After plan creation, step completion, or block detection
+**Trigger**: Automatically called after InitializePlan, UpdatePlanStep,
+DraftExternalAction, ExecuteApprovedAction, ArchivePlan (T048).
 
 **Inputs**:
-- None (scans vault state)
+- None (scans entire vault state)
 
-**Process**:
-1. Scan `/Plans/` for all incomplete plans
-2. For each plan:
-   - Extract plan_id, objective, status, progress (completed/total steps)
-   - Calculate next step
-   - Detect blocks (HITL steps with pending approvals)
-3. Sort by status (Active > Blocked > Draft) and date
-4. Update Dashboard.md with "⚡ Current Missions" section
-5. Calculate stats: Active Plans, Blocked Plans, Completion %, Oldest Block
+**Process** (7 steps):
+1. Scan `/Plans/` for all incomplete plans (status ≠ Done)
+2. Scan `/Pending_Approval/` for approval files — count by plan_id
+3. Identify active plan: Active > Blocked > Draft, most recent first
+4. Rebuild `⚡ Current Missions` section with live status badges, progress bars, and pending approval counts
+5. Recalculate `📊 Plan Statistics` (Active / Blocked / Draft / Done counts, step completion %)
+6. Populate `🚨 Alerts` for any plan blocked > 24 hours
+7. Collect last 10 reasoning log entries (newest first) → `🕐 Recent Activity`
+8. Write `Dashboard.md` atomically (temp-file-and-rename)
 
 **Outputs**:
-- Dashboard.md updated with live plan status
+- `Dashboard.md` updated with all four sections
 - Alert section populated if blocks > 24 hours old
+- Target latency: < 5 seconds
+
+**Python Implementation**:
+
+```python
+from pathlib import Path
+from agents.skills.managing_obsidian_vault.dashboard_reconciler import DashboardReconciler
+
+reconciler = DashboardReconciler(vault_root=Path("/vault"))
+reconciler.reconcile()
+```
+
+**Integration Points (T048)**:
+- `InitializePlan` → call `reconciler.reconcile()` after plan file created
+- `UpdatePlanStep` → call after each step marked complete
+- `DraftExternalAction` → call after approval file written to `/Pending_Approval/`
+- `ExecuteApprovedAction` → call after action executed and archived
+- `ArchivePlan` → call after plan moved to `/Done/Plans/`
 
 ---
 
