@@ -31,6 +31,17 @@ from agents.skills.managing_obsidian_vault.plan_manager import PlanContent, Plan
 
 logger = logging.getLogger(__name__)
 
+# Lazily imported to avoid circular imports
+_BlockManager = None
+
+
+def _get_block_manager_class():
+    global _BlockManager
+    if _BlockManager is None:
+        from agents.skills.managing_obsidian_vault.block_manager import BlockManager
+        _BlockManager = BlockManager
+    return _BlockManager
+
 # Plans blocked longer than this trigger a 🚨 alert
 BLOCK_ALERT_THRESHOLD_HOURS = 24
 
@@ -91,6 +102,7 @@ class DashboardReconciler:
         self.pending_dir = vault_root / "Pending_Approval"
         self.dashboard_path = vault_root / "Dashboard.md"
         self._plan_manager = PlanManager(vault_root=vault_root)
+        self._block_manager = _get_block_manager_class()(vault_root=vault_root)
         logger.info("DashboardReconciler initialised with vault_root=%s", vault_root)
 
     # ------------------------------------------------------------------
@@ -317,26 +329,126 @@ class DashboardReconciler:
         return "\n".join(lines)
 
     def _build_alerts(self, missions: list[MissionStatus]) -> list[str]:
+        """
+        T053/T054: Build stale-block alerts using BlockManager for precise age tracking.
+
+        Uses actual approval-file creation timestamps (not plan creation date),
+        so alert age reflects how long the approval has been waiting.
+        """
         alerts: list[str] = []
-        threshold = timedelta(hours=BLOCK_ALERT_THRESHOLD_HOURS)
-        now = datetime.now(timezone.utc)
 
         for m in missions:
             if m.status != "Blocked":
                 continue
             try:
-                created = datetime.fromisoformat(m.created_date.replace("Z", "+00:00"))
-                age = now - created
-                if age > threshold:
-                    hours = int(age.total_seconds() / 3600)
+                block_info = self._block_manager.get_block_info(m.plan_id)
+                if block_info and block_info.hours_blocked >= BLOCK_ALERT_THRESHOLD_HOURS:
+                    hours = int(block_info.hours_blocked)
                     alerts.append(
-                        f"🔴 **{m.plan_id}** blocked for {hours}h — "
-                        f"'{m.objective[:60]}...' requires human action."
+                        f"⚠️ **{m.plan_id}** blocked for {hours}h "
+                        f"(step {block_info.step_id}: {block_info.step_description[:50]}) — "
+                        f"Last approval request: `{block_info.pending_filename}`. "
+                        f"Human action required: move file to `/Approved/`."
                     )
-            except (ValueError, TypeError):
-                pass
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("Could not get block info for %s: %s", m.plan_id, exc)
 
         return alerts
+
+    def _build_alerts_with_simulated_time(
+        self, missions: list[MissionStatus], now_override: Optional[datetime] = None
+    ) -> list[str]:
+        """
+        T054: Same as _build_alerts but allows injecting a 'now' for testing 24h threshold.
+        Used by tests that simulate time passage without sleep().
+        """
+        alerts: list[str] = []
+        if now_override is None:
+            return self._build_alerts(missions)
+
+        for m in missions:
+            if m.status != "Blocked":
+                continue
+            try:
+                block_info = self._block_manager.get_block_info(m.plan_id)
+                if not block_info:
+                    continue
+                # Recalculate age using injected now
+                then = datetime.fromisoformat(
+                    block_info.block_started_at.replace("Z", "+00:00")
+                )
+                age_hours = (now_override - then).total_seconds() / 3600
+                if age_hours >= BLOCK_ALERT_THRESHOLD_HOURS:
+                    hours = int(age_hours)
+                    alerts.append(
+                        f"⚠️ **{m.plan_id}** blocked for {hours}h "
+                        f"(step {block_info.step_id}: {block_info.step_description[:50]}) — "
+                        f"Last approval request: `{block_info.pending_filename}`. "
+                        f"Human action required: move file to `/Approved/`."
+                    )
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("Alert build error for %s: %s", m.plan_id, exc)
+
+        return alerts
+
+    def reconcile_with_time(self, now_override: Optional[datetime] = None) -> Path:
+        """
+        T054: Like reconcile() but accepts a 'now' override for testing stale-block alerts.
+        """
+        missions = self._collect_missions()
+        pending_counts = self._count_pending_by_plan()
+        for m in missions:
+            raw_id = m.plan_id
+            prefixed_id = f"PLAN-{raw_id}" if not raw_id.startswith("PLAN-") else raw_id
+            m.pending_approval_count = (
+                pending_counts.get(raw_id, 0) + pending_counts.get(prefixed_id, 0)
+            )
+        done_count = self._count_done_plans()
+        recent_activity = self._collect_recent_activity(missions, limit=10)
+
+        # Use time-aware alert builder
+        now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        active_count = sum(1 for m in missions if m.status == "Active")
+        blocked_count = sum(1 for m in missions if m.status == "Blocked")
+        draft_count = sum(1 for m in missions if m.status == "Draft")
+        total_steps = sum(m.total_steps for m in missions)
+        done_steps = sum(m.completed_steps for m in missions)
+        completion_pct = int(done_steps / total_steps * 100) if total_steps > 0 else 0
+
+        alerts = self._build_alerts_with_simulated_time(missions, now_override=now_override)
+
+        sections: list[str] = []
+        sections.append(
+            f"# 🧠 Silver Tier Agent Dashboard\n\n"
+            f"**Last Updated**: `{now}`  \n"
+            f"**Vault**: Silver Tier Reasoning System  \n"
+            f"**Agent**: obsidian-vault-agent\n"
+        )
+        sections.append(self._render_missions_section(missions))
+        sections.append(
+            f"## 📊 Plan Statistics\n\n"
+            f"| Metric | Value |\n"
+            f"|--------|-------|\n"
+            f"| 🟢 Active Plans | {active_count} |\n"
+            f"| 🔴 Blocked Plans | {blocked_count} |\n"
+            f"| ⚪ Draft Plans | {draft_count} |\n"
+            f"| ✅ Completed Plans | {done_count} |\n"
+            f"| 📈 Step Completion | {done_steps}/{total_steps} ({completion_pct}%) |\n"
+        )
+        if alerts:
+            alert_lines = "\n".join(f"- {a}" for a in alerts)
+            sections.append(f"## 🚨 Alerts\n\n{alert_lines}\n")
+        else:
+            sections.append("## 🚨 Alerts\n\n_No active alerts._\n")
+        if recent_activity:
+            activity_lines = "\n".join(f"- {entry}" for entry in recent_activity)
+            sections.append(f"## 🕐 Recent Activity\n\n{activity_lines}\n")
+        else:
+            sections.append("## 🕐 Recent Activity\n\n_No activity recorded yet._\n")
+
+        content = "\n---\n\n".join(sections)
+        self._atomic_write(self.dashboard_path, content)
+        return self.dashboard_path
 
     # ------------------------------------------------------------------
     # Private: atomic write + timestamp helpers
