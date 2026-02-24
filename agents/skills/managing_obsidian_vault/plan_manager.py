@@ -474,6 +474,64 @@ class PlanManager:
         logger.info(f"Merged {len(new_steps)} steps into plan {existing_plan.metadata.task_id}")
         return existing_plan
 
+    def validate_hitl_completion(
+        self,
+        plan_id: str,
+        step_number: int,
+        approval_manager: Optional[object] = None,
+    ) -> bool:
+        """
+        Enforce T044: prevent marking a ✋ step complete without approval proof.
+
+        A step that requires human-in-the-loop (hitl_required=True) MUST have a
+        corresponding executed approval file before it can be marked [x].
+
+        Args:
+            plan_id: Plan identifier
+            step_number: Step number (1-indexed)
+            approval_manager: ApprovalManager instance for checking approval files.
+                              If None, raises PermissionError unconditionally for
+                              HITL steps (safe-fail default).
+
+        Returns:
+            True if step may be marked complete
+
+        Raises:
+            ValueError: If step_number is out of range
+            PermissionError: If step is HITL-required and no approval proof found
+        """
+        plan = self.load_plan(plan_id)
+
+        if step_number < 1 or step_number > len(plan.steps):
+            raise ValueError(f"Invalid step number: {step_number} (plan has {len(plan.steps)} steps)")
+
+        step = plan.steps[step_number - 1]
+
+        if not step.hitl_required:
+            # Non-HITL step: no approval check required
+            return True
+
+        # HITL step: verify approval exists
+        if approval_manager is None:
+            raise PermissionError(
+                f"Cannot mark HITL step {step_number} complete in plan {plan_id}: "
+                f"no ApprovalManager provided. "
+                f"Pass an ApprovalManager instance to validate approval proof."
+            )
+
+        # Delegate to ApprovalManager.validate_hitl_step_has_approval()
+        # This raises PermissionError if no executed approval file is found
+        approval_manager.validate_hitl_step_has_approval(
+            plan_id=plan.metadata.task_id,
+            step_id=step_number,
+        )
+
+        logger.info(
+            "HITL completion validated for plan %s step %d",
+            plan.metadata.task_id, step_number,
+        )
+        return True
+
     # Private helper methods
 
     def _atomic_write(self, path: Path, content: str) -> None:
