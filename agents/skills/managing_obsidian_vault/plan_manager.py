@@ -411,6 +411,131 @@ class PlanManager:
         logger.info(f"Plan archived: {plan_id} -> {dest_path}")
         return dest_path
 
+    # ------------------------------------------------------------------
+    # T060 — handle_corrupted_plan
+    # ------------------------------------------------------------------
+
+    def handle_corrupted_plan(self, plan_path: Path) -> Optional[Path]:
+        """
+        Handle a corrupted Plan.md file that cannot be parsed.
+
+        Process:
+        1. Detect invalid YAML, missing sections, or incomplete file.
+        2. Log error to dashboard / logger — DO NOT crash.
+        3. Move corrupted file to /Archive/Corrupted/ for human review.
+        4. Return path to the quarantined file, or None if move fails.
+
+        Args:
+            plan_path: Path to the plan file that failed to parse.
+
+        Returns:
+            Path to quarantined file, or None if quarantine also fails.
+        """
+        corrupted_dir = self.vault_root / "Archive" / "Corrupted"
+        corrupted_dir.mkdir(parents=True, exist_ok=True)
+
+        dest_path = corrupted_dir / plan_path.name
+        try:
+            # Read raw content for diagnostic log
+            raw = plan_path.read_text(encoding="utf-8", errors="replace")
+            logger.error(
+                "Corrupted plan detected: %s — first 200 chars: %r",
+                plan_path.name,
+                raw[:200],
+            )
+
+            # Atomic copy to quarantine, then remove source
+            dest_path.write_text(raw, encoding="utf-8")
+            plan_path.unlink(missing_ok=True)
+
+            logger.warning(
+                "Corrupted plan quarantined: %s -> %s. "
+                "Human review required — do NOT auto-delete.",
+                plan_path.name,
+                dest_path,
+            )
+            return dest_path
+
+        except Exception as exc:  # noqa: BLE001
+            logger.error(
+                "Failed to quarantine corrupted plan %s: %s",
+                plan_path.name,
+                exc,
+            )
+            return None
+
+    # ------------------------------------------------------------------
+    # T062 — consolidate_duplicate_plans (enhances detect_duplicate_plan)
+    # ------------------------------------------------------------------
+
+    def consolidate_duplicate_plans(
+        self,
+        primary_plan_id: str,
+        duplicate_plan_id: str,
+    ) -> Path:
+        """
+        Merge steps from a duplicate plan into the primary plan and archive
+        the duplicate.
+
+        Process:
+        1. Load both plans.
+        2. Merge unique steps from duplicate into primary via merge_plan_steps().
+        3. Append a reasoning log entry recording the consolidation.
+        4. Save primary plan.
+        5. Move duplicate to /Archive/ with a consolidation note.
+
+        Args:
+            primary_plan_id: Plan to keep and merge into.
+            duplicate_plan_id: Plan to merge from and then archive.
+
+        Returns:
+            Path to the updated primary plan file.
+
+        Raises:
+            FileNotFoundError: If either plan cannot be found.
+        """
+        primary = self.load_plan(primary_plan_id)
+        duplicate = self.load_plan(duplicate_plan_id)
+
+        # Collect raw step descriptions from duplicate
+        dup_steps = [
+            ("✋ " if s.hitl_required else "") + s.description
+            for s in duplicate.steps
+        ]
+
+        # Merge unique steps into primary
+        primary = self.merge_plan_steps(primary, dup_steps)
+
+        # Log the consolidation
+        primary.reasoning_logs.append(
+            f"[{self._iso_timestamp()}] Agent: Consolidated duplicate plan "
+            f"{duplicate.metadata.task_id} into {primary.metadata.task_id} — "
+            f"merged {len(dup_steps)} steps; duplicate archived."
+        )
+
+        # Save primary
+        primary_path = self.plans_dir / f"PLAN-{primary.metadata.task_id}.md"
+        self._write_plan_file(primary_path, primary)
+
+        # Archive duplicate to /Archive/
+        archive_dir = self.vault_root / "Archive"
+        archive_dir.mkdir(parents=True, exist_ok=True)
+        dup_source = self.plans_dir / f"PLAN-{duplicate.metadata.task_id}.md"
+        dup_dest = archive_dir / f"PLAN-{duplicate.metadata.task_id}.md"
+
+        if dup_source.exists():
+            dup_raw = dup_source.read_text(encoding="utf-8")
+            dup_dest.write_text(dup_raw, encoding="utf-8")
+            dup_source.unlink(missing_ok=True)
+
+        logger.info(
+            "Duplicate plan %s consolidated into %s; duplicate moved to %s",
+            duplicate_plan_id,
+            primary_plan_id,
+            dup_dest,
+        )
+        return primary_path
+
     def detect_duplicate_plan(self, task_id: str, source_link: Optional[str] = None) -> Optional[PlanContent]:
         """
         Detect if a plan already exists for the same task or source.
