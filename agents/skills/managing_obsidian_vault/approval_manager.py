@@ -58,6 +58,8 @@ class ApprovalRequest:
     draft_content: str
     created_date: str
     status: ApprovalStatus = ApprovalStatus.PENDING
+    # T064: Traceability — exact step description for full audit trail
+    step_description: str = ""        # Human-readable description of the plan step
     execution_result: Optional[str] = None
     file_path: Optional[Path] = None
 
@@ -96,6 +98,8 @@ class ApprovalRequest:
             rationale=str(meta["rationale"]),
             created_date=str(meta["created_date"]),
             status=ApprovalStatus(meta["status"]),
+            # T064: load step_description; default empty string for old files
+            step_description=str(meta.get("step_description", "")),
             draft_content=parts[2].strip(),
             execution_result=meta.get("execution_result"),
             file_path=path,
@@ -108,6 +112,8 @@ class ApprovalRequest:
             "target_recipient": self.target_recipient,
             "plan_id": self.plan_id,
             "step_id": self.step_id,
+            # T064: include step_description for full traceability
+            "step_description": self.step_description,
             "rationale": self.rationale,
             "created_date": self.created_date,
             "status": self.status.value,
@@ -158,6 +164,7 @@ class ApprovalManager:
         step_id: int,
         draft_content: str,
         rationale: str,
+        step_description: str = "",
     ) -> Path:
         """
         Create an approval request file in /Pending_Approval/.
@@ -172,6 +179,8 @@ class ApprovalManager:
             step_id: Step number within the plan (1-indexed)
             draft_content: Full content to be executed (email body, etc.)
             rationale: Why this action is needed (plan context)
+            step_description: T064 — Human-readable description of the plan step
+                              for full audit traceability (task → plan → approval).
 
         Returns:
             Path to created approval request file
@@ -200,6 +209,8 @@ class ApprovalManager:
             plan_id=plan_id,
             step_id=step_id,
             rationale=rationale,
+            # T064: embed step_description for full audit trail
+            step_description=step_description,
             draft_content=self._build_draft_body(action_type, target_recipient, draft_content),
             created_date=timestamp,
             status=ApprovalStatus.PENDING,
@@ -330,17 +341,64 @@ class ApprovalManager:
             logger.info("Action executed and archived: %s", filename)
             return True, result_msg
 
+        except TimeoutError as exc:
+            # T061: MCP server timeout
+            error_msg = f"MCP timeout: {exc}"
+            logger.error("MCP server timed out for %s: %s", filename, exc)
+            return self._recover_failed_action(approved_path, req, error_msg)
+
+        except ConnectionError as exc:
+            # T061: MCP server offline / unreachable
+            error_msg = f"MCP offline: {exc}"
+            logger.error("MCP server unreachable for %s: %s", filename, exc)
+            return self._recover_failed_action(approved_path, req, error_msg)
+
+        except PermissionError as exc:
+            # T061: MCP auth failure
+            error_msg = f"MCP auth failure: {exc}"
+            logger.error("MCP authentication failed for %s: %s", filename, exc)
+            return self._recover_failed_action(approved_path, req, error_msg)
+
         except Exception as exc:  # noqa: BLE001
             error_msg = f"MCP execution failed: {exc}"
             logger.error(error_msg)
+            return self._recover_failed_action(approved_path, req, error_msg)
 
-            # Failure: annotate and move back to /Pending_Approval/
-            req.execution_result = error_msg
-            recovery_path = self.pending_dir / filename
+    def _recover_failed_action(
+        self,
+        approved_path: Path,
+        req: "ApprovalRequest",
+        error_msg: str,
+    ) -> tuple[bool, str]:
+        """
+        T061: Recovery helper — annotate file with failure reason and
+        move it back to /Pending_Approval/ so the human can re-review.
+
+        Args:
+            approved_path: Current path in /Approved/
+            req: Parsed approval request
+            error_msg: Human-readable failure description
+
+        Returns:
+            (False, error_msg)
+        """
+        req.execution_result = error_msg
+        recovery_path = self.pending_dir / approved_path.name
+        try:
             self._atomic_write(recovery_path, req.render_file_content())
             approved_path.unlink(missing_ok=True)
-
-            return False, error_msg
+            logger.warning(
+                "Failed action returned to /Pending_Approval/: %s — reason: %s",
+                approved_path.name,
+                error_msg,
+            )
+        except Exception as write_exc:  # noqa: BLE001
+            logger.error(
+                "Could not recover failed action file %s: %s",
+                approved_path.name,
+                write_exc,
+            )
+        return False, error_msg
 
     # ------------------------------------------------------------------
     # Rejection handling
