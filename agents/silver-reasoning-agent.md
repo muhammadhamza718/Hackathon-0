@@ -232,6 +232,94 @@ You MUST NOT:
 
 ---
 
+## Best Practices (T067)
+
+### When to Create a Plan
+
+**Create a Plan.md** when the task:
+- Has 3 or more distinct steps.
+- Requires at least one external action (email, payment, post).
+- Spans multiple sessions or depends on human feedback.
+- Involves financial data, client communications, or audit-critical operations.
+
+**Skip a Plan.md** when:
+- The task is a single read or lookup (e.g., "show me inbox", "what is today's date").
+- It has no external actions and can complete in one step.
+- The user explicitly says "just do it quickly" for a trivial task.
+
+---
+
+### How to Structure Steps for Clarity
+
+1. **One action per step** — each step should be a single, verifiable action.
+2. **Lead with a verb**: `Calculate`, `Generate`, `Log`, `Send`.
+3. **Mark HITL steps with ✋**: Any step with external state change MUST have the ✋ prefix.
+4. **Order by dependency**: Steps that feed into later steps must come first.
+5. **Use plain language**: Steps are read by humans in approval files — be descriptive.
+
+**Good step examples**:
+```
+- [ ] Calculate invoice total including 10% tax
+- [ ] Generate PDF invoice from template
+- [ ] Log invoice number in accounts spreadsheet
+- [ ] ✋ Send invoice email to client@example.com
+```
+
+**Poor step examples** (avoid):
+```
+- [ ] Do invoice stuff          ← too vague
+- [ ] Calculate and send email  ← two actions in one
+- [ ] Email                     ← no verb, no context
+```
+
+---
+
+### Common Patterns
+
+#### Pattern 1: Research → Draft → Send
+```
+1. Read/gather data (no approval needed)
+2. Draft content internally
+3. ✋ Send/publish (approval required)
+```
+
+#### Pattern 2: Calculate → Generate → Approve → Archive
+```
+1. Compute result
+2. Generate artifact (PDF, report, etc.)
+3. ✋ Send to stakeholder (approval required)
+4. Archive to vault
+```
+
+#### Pattern 3: Multi-stakeholder Coordination
+```
+1. Prepare materials
+2. ✋ Send to Party A (approval required)
+3. Wait for Party A response (new session)
+4. ✋ Send to Party B (approval required)
+5. Log outcome
+```
+
+---
+
+### Audit Trail Best Practices
+
+- **Always call `AuditLogger`** after plan creation, step completion, and archival.
+- **Always pass `step_description`** when calling `draft_external_action()` to ensure full traceability from original task → plan step → approval file → execution.
+- **Never delete audit log files** in `/Logs/` — they are the permanent record.
+- **Check `/Logs/YYYY-MM-DD.json`** when investigating incidents.
+
+---
+
+### Error Recovery Best Practices
+
+- **Corrupted plans**: Never delete — quarantine to `/Archive/Corrupted/` and repair.
+- **MCP failures**: The approval file is automatically returned to `/Pending_Approval/` — fix the underlying issue and re-approve.
+- **Duplicate plans**: Use `consolidate_duplicate_plans()` rather than manually deleting.
+- **Never bypass the HITL gate** — even if the action seems urgent. The gate exists to protect against irreversible mistakes.
+
+---
+
 ## References
 
 - **Silver Law Constitution**: `.specify/memory/constitution.md`
