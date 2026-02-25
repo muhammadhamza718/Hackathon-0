@@ -640,19 +640,19 @@ description: "Task list for Silver Tier Reasoning & Planning System implementati
 
 ### 8.1 Error Handling & Recovery
 
-- [ ] T060 [P] Implement error handling for corrupted Plan.md files
+- [x] T060 [P] Implement error handling for corrupted Plan.md files
   - File: `agents/skills/managing-obsidian-vault/plan-manager.md` → add `handle_corrupted_plan()`
   - Process: Detect invalid YAML, missing sections, incomplete file
   - Action: Log error in Dashboard, display alert to human, DO NOT crash
   - Recovery: Human reviews and manually fixes or deletes file
 
-- [ ] T061 [P] Implement MCP failure detection and recovery
+- [x] T061 [P] Implement MCP failure detection and recovery
   - File: `agents/skills/managing-obsidian-vault/procedures/execute-approved-action.md`
   - Process: Catch MCP server errors (timeout, offline, auth failure)
   - Action: Log error in Reasoning Logs, move approval file back to `/Pending_Approval/` with failure reason
   - Recovery: Human can review error and retry
 
-- [ ] T062 [P] Implement duplicate plan consolidation
+- [x] T062 [P] Implement duplicate plan consolidation
   - File: `agents/skills/managing-obsidian-vault/plan-manager.md` → enhance `detect_duplicate_plan()`
   - Process: Detect if two plans have same task_id or source_link
   - Action: Merge steps or consolidate, move duplicate to `/Archive/`, log in Reasoning Logs
@@ -662,13 +662,13 @@ description: "Task list for Silver Tier Reasoning & Planning System implementati
 
 ### 8.2 Audit Logging & Traceability
 
-- [ ] T063 [P] Enhance logging to track all plan operations
+- [x] T063 [P] Enhance logging to track all plan operations
   - File: `agents/skills/managing-obsidian-vault/procedures/audit-logging.md`
   - Log events: plan created, step completed, approval drafted, approval executed, plan archived
   - Format: Append to `/Logs/YYYY-MM-DD.json`
   - Content: timestamp, action, actor (Agent), plan_id, step_id, result (success/failure)
 
-- [ ] T064 [P] Add traceability: Link approval requests back to plan steps
+- [x] T064 [P] Add traceability: Link approval requests back to plan steps
   - File: `agents/skills/managing-obsidian-vault/procedures/draft-external-action.md` (enhance)
   - Include in approval file: `plan_id`, `step_id`, `step_description`
   - Enable full audit trail from original task → plan → approval → execution
@@ -677,17 +677,17 @@ description: "Task list for Silver Tier Reasoning & Planning System implementati
 
 ### 8.3 Documentation & Reference
 
-- [ ] T065 Create comprehensive troubleshooting guide
+- [x] T065 Create comprehensive troubleshooting guide
   - File: `docs/silver-reasoning-troubleshooting.md`
   - Scenarios: Corrupted plans, MCP failures, forgotten approvals, duplicate plans
   - Recovery procedures for each
 
-- [ ] T066 Create quick-start guide for Silver Tier workflows
+- [x] T066 Create quick-start guide for Silver Tier workflows
   - File: `docs/silver-reasoning-quickstart.md`
   - Example: Invoice workflow (request → plan → approval → completion)
   - Example: Project with multiple steps and dependencies
 
-- [ ] T067 Update agent instructions with Silver Tier best practices
+- [x] T067 Update agent instructions with Silver Tier best practices
   - File: `agents/silver-reasoning-agent.md` → add "Best Practices" section
   - When to create plans, when to skip
   - How to structure steps for clarity
@@ -697,7 +697,7 @@ description: "Task list for Silver Tier Reasoning & Planning System implementati
 
 ### 8.4 Full Integration Tests
 
-- [ ] T068 [P] Full-loop simulation: Invoice workflow
+- [x] T068 [P] Full-loop simulation: Invoice workflow
   - File: `tests/e2e/test-invoice-workflow.py`
   - Scenario: "Generate and send invoice to Client A for $1,500"
   - Steps:
@@ -711,7 +711,7 @@ description: "Task list for Silver Tier Reasoning & Planning System implementati
     8. Dashboard updated
   - Assertions: All steps executed in order, no skipped, approval enforced
 
-- [ ] T069 [P] Full-loop simulation: Multi-session workflow
+- [x] T069 [P] Full-loop simulation: Multi-session workflow
   - File: `tests/e2e/test-multi-session-workflow.py`
   - Scenario: Complex task interrupted mid-execution
   - Steps:
@@ -725,7 +725,7 @@ description: "Task list for Silver Tier Reasoning & Planning System implementati
     8. Session 4 starts: Approval detected, execution continues
     9. Plan completed
 
-- [ ] T070 [P] Full-loop simulation: Safety breach prevention
+- [x] T070 [P] Full-loop simulation: Safety breach prevention
   - File: `tests/e2e/test-safety-breach-prevention.py`
   - Scenario: Agent attempts to send email without approval
   - Expected: Agent creates approval request, stops before MCP call
@@ -735,11 +735,11 @@ description: "Task list for Silver Tier Reasoning & Planning System implementati
 
 ### 8.5 Documentation & Knowledge
 
-- [ ] T071 Create PHR (Prompt History Record) for tasks generation
+- [x] T071 Create PHR (Prompt History Record) for tasks generation
   - File: `history/prompts/003-silver-reasoning/003-create-silver-reasoning-tasks.tasks.prompt.md`
   - Record: Task generation process, decisions made, scope
 
-- [ ] T072 Update project README with Silver Tier information
+- [x] T072 Update project README with Silver Tier information
   - File: `README.md` → add "Silver Tier Features" section
   - Overview: Reasoning loops, multi-session persistence, HITL approval
   - Quick link to docs, examples, troubleshooting
