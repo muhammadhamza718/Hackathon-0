@@ -1,4 +1,4 @@
-# Personal AI Employee — Hackathon 0
+# Personal AI Employee — Hackathon 
 
 A production-ready **Obsidian Vault-based AI Employee** system implementing a Bronze–Silver tiered architecture for autonomous task execution with human-in-the-loop safety gates.
 
