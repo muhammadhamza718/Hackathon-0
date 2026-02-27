@@ -1,6 +1,12 @@
 # Personal AI Employee — Hackathon 0
 
+![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)
+![License MIT](https://img.shields.io/badge/license-MIT-green)
+![Tests](https://img.shields.io/badge/tests-passing-brightgreen)
+
 A production-ready **Obsidian Vault-based AI Employee** system implementing a Bronze–Silver tiered architecture for autonomous task execution with human-in-the-loop safety gates.
+
+> **Docs:** [Architecture](docs/architecture.md) · [Vault Guide](docs/vault-guide.md) · [Contributing](CONTRIBUTING.md) · [Changelog](CHANGELOG.md)
 
 ---
 
