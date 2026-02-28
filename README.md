@@ -6,7 +6,27 @@
 
 A production-ready **Obsidian Vault-based AI Employee** system implementing a Bronze–Silver tiered architecture for autonomous task execution with human-in-the-loop safety gates.
 
-> **Docs:** [Architecture](docs/architecture.md) · [Vault Guide](docs/vault-guide.md) · [Contributing](CONTRIBUTING.md) · [Changelog](CHANGELOG.md)
+> **Docs:** [Architecture](docs/architecture.md) · [Vault Guide](docs/vault-guide.md) · [Security](docs/security.md) · [Glossary](docs/glossary.md) · [Deployment](docs/deployment.md) · [Testing](docs/testing-guide.md) · [Contributing](CONTRIBUTING.md) · [Changelog](CHANGELOG.md)
+
+---
+
+## Quick Start
+
+```bash
+# Clone
+git clone https://github.com/muhammadhamza718/Hackathon-0.git
+cd Hackathon-0
+
+# Setup vault directories
+mkdir -p Inbox Needs_Action Done Pending_Approval Approved Rejected Plans Logs
+
+# Configure sentinel
+cp .env.example .env   # edit with your paths
+
+# Install & run
+cd sentinel && uv sync
+uv run python -m sentinel
+```
 
 ---
 
