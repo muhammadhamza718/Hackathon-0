@@ -25,3 +25,20 @@ Thumbs.db
 
 # Test vault (E2E test artifacts)
 test-vault/
+
+# Coverage
+htmlcov/
+.coverage
+coverage.xml
+
+# Build
+build/
+
+# Pytest
+.pytest_cache/
+
+# mypy
+.mypy_cache/
+
+# Ruff
+.ruff_cache/
