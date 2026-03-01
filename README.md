@@ -6,7 +6,7 @@
 
 A production-ready **Obsidian Vault-based AI Employee** system implementing a Bronze–Silver tiered architecture for autonomous task execution with human-in-the-loop safety gates.
 
-> **Docs:** [Architecture](docs/architecture.md) · [Vault Guide](docs/vault-guide.md) · [Security](docs/security.md) · [Glossary](docs/glossary.md) · [Deployment](docs/deployment.md) · [Testing](docs/testing-guide.md) · [Contributing](CONTRIBUTING.md) · [Changelog](CHANGELOG.md)
+> **Docs:** [Architecture](docs/architecture.md) · [API Reference](docs/api-reference.md) · [Vault Guide](docs/vault-guide.md) · [Security](docs/security.md) · [Development](docs/development.md) · [Roadmap](docs/roadmap.md) · [Glossary](docs/glossary.md) · [Deployment](docs/deployment.md) · [Testing](docs/testing-guide.md) · [Contributing](CONTRIBUTING.md) · [Changelog](CHANGELOG.md)
 
 ---
 
