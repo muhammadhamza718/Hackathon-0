@@ -40,7 +40,9 @@ PRIORITY_LOW = "low"
 # Tier names
 # Default config
 DEFAULT_STABILITY_SECONDS = 2.0
+MAX_INBOX_SCAN_FILES = 100
 DEFAULT_LOG_LEVEL = "INFO"
+DEFAULT_ALLOWED_EXTENSIONS = ".md,.txt,.pdf,.jpg,.jpeg,.png"
 
 # Tier names
 TIER_BRONZE = "bronze"
