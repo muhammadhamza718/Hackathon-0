@@ -14,6 +14,7 @@ LOGS_DIR = "Logs"
 PLAN_FILE_PREFIX = "PLAN-"
 PLAN_FILE_PATTERN = "PLAN-*.md"
 DASHBOARD_FILE = "Dashboard.md"
+AUDIT_LOG_PREFIX = "audit-"
 
 # Plan statuses
 STATUS_DRAFT = "draft"
