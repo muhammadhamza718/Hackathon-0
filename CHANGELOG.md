@@ -8,12 +8,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-03-02
+
 ### Added
-- Silver Tier reasoning and planning loop
-- Multi-session plan persistence
-- HITL safety gate for external actions
-- Safety breach prevention tests
-- E2E multi-session workflow tests
+- Audit logger with append-only log files
+- Inbox scanner with priority extraction
+- Task templates for simple and HITL tasks
+- Frontmatter parser and builder
+- Complexity detector with scoring
+- Sentinel health checker
+- Custom exception hierarchy
+- Vault initializer module
 
 ---
 
