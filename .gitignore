@@ -43,3 +43,6 @@ build/
 
 # Ruff
 .ruff_cache/
+
+# Logs
+*.log
