@@ -41,7 +41,7 @@ def is_valid_status(status: str) -> bool:
     Returns:
         True if valid.
     """
-    return status in ("draft", "active", "blocked", "complete", "approved", "rejected")
+    return status in ("draft", "active", "blocked", "complete", "approved", "rejected", "cancelled")
 
 
 def has_frontmatter(content: str) -> bool:
