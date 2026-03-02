@@ -23,6 +23,7 @@ STATUS_BLOCKED = "blocked"
 STATUS_COMPLETE = "complete"
 STATUS_APPROVED = "approved"
 STATUS_REJECTED = "rejected"
+STATUS_CANCELLED = "cancelled"
 
 # HITL markers
 HITL_MARKER = "✋"
