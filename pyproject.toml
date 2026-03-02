@@ -1,6 +1,6 @@
 [project]
 name = "personal-ai-employee"
-version = "0.2.0"
+version = "0.3.0"
 description = "Obsidian Vault-based AI Employee with Bronze-Silver tiered architecture"
 requires-python = ">=3.11"
 authors = [
