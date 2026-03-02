@@ -90,6 +90,8 @@ def validate_vault_structure(vault_root: Path) -> list[str]:
         "Pending_Approval",
         "Approved",
         "Rejected",
+        "Plans",
+        "Logs",
     ]
     errors = []
     for d in required:
