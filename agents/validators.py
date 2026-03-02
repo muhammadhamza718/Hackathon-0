@@ -29,7 +29,7 @@ def is_valid_priority(priority: str) -> bool:
     Returns:
         True if valid (high, medium, low).
     """
-    return priority in ("high", "medium", "low")
+    return priority in ("critical", "high", "medium", "low")
 
 
 def is_valid_status(status: str) -> bool:
