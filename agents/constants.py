@@ -36,3 +36,4 @@ PRIORITY_LOW = "low"
 # Tier names
 TIER_BRONZE = "bronze"
 TIER_SILVER = "silver"
+TIER_GOLD = "gold"
