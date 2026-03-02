@@ -56,6 +56,11 @@ def safe_read(path: Path) -> str | None:
         return None
 
 
+def is_markdown(path: Path) -> bool:
+    """Check if a file path has a .md extension."""
+    return path.suffix.lower() == ".md"
+
+
 def truncate(text: str, max_len: int = 80) -> str:
     """Truncate text to max length with ellipsis."""
     if len(text) <= max_len:
