@@ -45,3 +45,7 @@ class ReconciliationError(AgentError):
 
 class ConfigurationError(AgentError):
     """Invalid or missing configuration."""
+
+
+class ScanError(AgentError):
+    """Error during inbox or vault scanning."""
