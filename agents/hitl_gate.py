@@ -81,3 +81,8 @@ class HITLGate:
         if self.is_rejected(filename):
             return "rejected"
         return "pending"
+
+    @property
+    def pending_count(self) -> int:
+        """Return number of items awaiting approval."""
+        return len(self.get_pending())
