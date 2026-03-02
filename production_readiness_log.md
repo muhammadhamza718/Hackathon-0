@@ -31,3 +31,4 @@ Tracking improvements natively safely.
 - [`2026-02-27T10:00:00`] chore: set up production security headers securely
 - [`2026-02-27T10:20:00`] chore: update core dependencies and patch vulnerabilities
 - [`2026-03-02T09:00:00`] refactor: optimize database query performance for production
+- [`2026-03-02T09:20:00`] docs: improve deployment documentation for production
