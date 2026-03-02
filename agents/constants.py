@@ -38,6 +38,11 @@ PRIORITY_MEDIUM = "medium"
 PRIORITY_LOW = "low"
 
 # Tier names
+# Default config
+DEFAULT_STABILITY_SECONDS = 2.0
+DEFAULT_LOG_LEVEL = "INFO"
+
+# Tier names
 TIER_BRONZE = "bronze"
 TIER_SILVER = "silver"
 TIER_GOLD = "gold"
