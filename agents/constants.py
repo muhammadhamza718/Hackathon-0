@@ -9,6 +9,7 @@ PLANS_DIR = "Plans"
 APPROVED_DIR = "Approved"
 REJECTED_DIR = "Rejected"
 LOGS_DIR = "Logs"
+ARCHIVE_DIR = "Archive"
 
 # File patterns
 PLAN_FILE_PREFIX = "PLAN-"
