@@ -31,6 +31,7 @@ STEP_DONE_MARKER = "[x]"
 STEP_PENDING_MARKER = "[ ]"
 
 # Priority levels
+PRIORITY_CRITICAL = "critical"
 PRIORITY_HIGH = "high"
 PRIORITY_MEDIUM = "medium"
 PRIORITY_LOW = "low"
