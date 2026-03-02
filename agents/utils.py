@@ -54,3 +54,10 @@ def safe_read(path: Path) -> str | None:
         return path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError):
         return None
+
+
+def truncate(text: str, max_len: int = 80) -> str:
+    """Truncate text to max length with ellipsis."""
+    if len(text) <= max_len:
+        return text
+    return text[: max_len - 3] + "..."
