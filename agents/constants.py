@@ -16,6 +16,7 @@ PLAN_FILE_PREFIX = "PLAN-"
 PLAN_FILE_PATTERN = "PLAN-*.md"
 DASHBOARD_FILE = "Dashboard.md"
 AUDIT_LOG_PREFIX = "audit-"
+COMPANY_HANDBOOK_FILE = "Company_Handbook.md"
 
 # Plan statuses
 STATUS_DRAFT = "draft"
