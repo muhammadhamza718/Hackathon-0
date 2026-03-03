@@ -1,4 +1,4 @@
-.PHONY: test lint install clean help
+.PHONY: test lint format install clean help
 
 help:
 	@echo "Available commands:"
@@ -24,6 +24,9 @@ test-e2e:
 
 lint:
 	cd sentinel && uv run ruff check .
+
+format:
+	cd sentinel && uv run ruff format .
 
 clean:
 	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
