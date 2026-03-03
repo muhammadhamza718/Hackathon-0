@@ -24,6 +24,9 @@ Thumbs.db
 .vscode/
 .idea/
 
+# Obsidian
+.obsidian/
+
 # Test vault (E2E test artifacts)
 test-vault/
 
