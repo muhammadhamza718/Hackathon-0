@@ -30,6 +30,7 @@ STATUS_CANCELLED = "cancelled"
 HITL_MARKER = "✋"
 STEP_DONE_MARKER = "[x]"
 STEP_PENDING_MARKER = "[ ]"
+REASONING_LOG_PREFIX = "## Reasoning Logs"
 
 # Priority levels
 PRIORITY_CRITICAL = "critical"
