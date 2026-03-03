@@ -10,6 +10,7 @@ from agents.constants import (
     DASHBOARD_FILE,
     DONE_DIR,
     INBOX_DIR,
+    LOGS_DIR,
     NEEDS_ACTION_DIR,
     PENDING_APPROVAL_DIR,
     PLANS_DIR,
@@ -50,6 +51,7 @@ def generate_dashboard(vault_root: Path) -> str:
         "Rejected": count_files(vault_root / REJECTED_DIR),
         "Done": count_files(vault_root / DONE_DIR),
         "Plans": count_files(vault_root / PLANS_DIR),
+        "Logs": count_files(vault_root / LOGS_DIR),
     }
 
     total = sum(folders.values())
