@@ -15,6 +15,7 @@ __all__ = [
     "ReconciliationError",
     "ConfigurationError",
     "ScanError",
+    "TemplateError",
 ]
 
 
@@ -64,3 +65,7 @@ class ConfigurationError(AgentError):
 
 class ScanError(AgentError):
     """Error during inbox or vault scanning."""
+
+
+class TemplateError(AgentError):
+    """Error while rendering a task template."""
