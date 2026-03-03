@@ -44,6 +44,18 @@ def is_valid_status(status: str) -> bool:
     return status in ("draft", "active", "blocked", "complete", "approved", "rejected", "cancelled")
 
 
+def is_valid_tier(tier: str) -> bool:
+    """Check if a tier name is valid.
+
+    Args:
+        tier: Tier string to validate.
+
+    Returns:
+        True if valid (bronze, silver, gold).
+    """
+    return tier in ("bronze", "silver", "gold")
+
+
 def has_frontmatter(content: str) -> bool:
     """Check if content has YAML frontmatter delimiters.
 
