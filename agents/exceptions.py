@@ -2,6 +2,21 @@
 
 from __future__ import annotations
 
+__all__ = [
+    "AgentError",
+    "VaultError",
+    "VaultStructureError",
+    "FileRoutingError",
+    "PlanError",
+    "PlanNotFoundError",
+    "PlanValidationError",
+    "HITLError",
+    "ApprovalTimeoutError",
+    "ReconciliationError",
+    "ConfigurationError",
+    "ScanError",
+]
+
 
 class AgentError(Exception):
     """Base exception for all agent errors."""
