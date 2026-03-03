@@ -49,3 +49,6 @@ build/
 
 # Logs
 *.log
+
+# Misc
+*.bak
