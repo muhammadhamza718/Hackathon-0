@@ -13,6 +13,11 @@ class ComplexityResult:
     score: int  # 0-10 complexity score
     reasons: list[str]  # Why it's complex
 
+    @property
+    def is_complex(self) -> bool:
+        """Convenience check for complex tasks."""
+        return self.level == "complex"
+
 
 # Patterns that signal complexity
 COMPLEX_PATTERNS = [
