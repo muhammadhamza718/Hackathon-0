@@ -56,3 +56,11 @@ def build(fields: dict[str, Any]) -> str:
         lines.append(f"{key}: {value}")
     lines.append("---")
     return "\n".join(lines)
+
+
+def strip(content: str) -> str:
+    """Remove frontmatter from content, returning only the body."""
+    match = re.match(r"^---\n.*?\n---\n?", content, re.DOTALL)
+    if match:
+        return content[match.end():]
+    return content
