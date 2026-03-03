@@ -27,7 +27,7 @@ def is_valid_priority(priority: str) -> bool:
         priority: Priority string to validate.
 
     Returns:
-        True if valid (high, medium, low).
+        True if valid (critical, high, medium, low).
     """
     return priority in ("critical", "high", "medium", "low")
 
