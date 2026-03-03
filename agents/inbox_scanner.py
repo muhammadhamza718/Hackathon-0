@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from agents.constants import INBOX_DIR
+from agents.constants import INBOX_DIR, MAX_INBOX_SCAN_FILES
 
 
 def scan_inbox(vault_root: Path) -> list[Path]:
@@ -20,7 +20,7 @@ def scan_inbox(vault_root: Path) -> list[Path]:
     inbox = vault_root / INBOX_DIR
     if not inbox.exists():
         return []
-    files = list(inbox.glob("*.md"))
+    files = list(inbox.glob("*.md"))[:MAX_INBOX_SCAN_FILES]
     return sorted(files, key=lambda f: f.stat().st_mtime, reverse=True)
 
 
