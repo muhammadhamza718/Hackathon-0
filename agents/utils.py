@@ -6,7 +6,7 @@ import re
 from datetime import datetime, timezone
 from pathlib import Path
 
-__all__ = ["utcnow_iso", "slugify", "ensure_dir", "safe_read", "is_markdown", "truncate"]
+__all__ = ["utcnow_iso", "slugify", "ensure_dir", "safe_read", "file_exists", "is_markdown", "truncate"]
 
 
 def utcnow_iso() -> str:
