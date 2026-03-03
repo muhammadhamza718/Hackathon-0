@@ -35,7 +35,7 @@ def extract_priority(content: str) -> str:
     Returns:
         Priority string ("high", "medium", "low") or "medium" as default.
     """
-    match = re.search(r"(?i)priority:\s*(high|medium|low)", content)
+    match = re.search(r"(?i)priority:\s*(critical|high|medium|low)", content)
     if match:
         return match.group(1).lower()
     return "medium"
