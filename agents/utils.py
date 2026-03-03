@@ -58,6 +58,11 @@ def safe_read(path: Path) -> str | None:
         return None
 
 
+def file_exists(path: Path) -> bool:
+    """Check if a path exists and is a file (not a directory)."""
+    return path.exists() and path.is_file()
+
+
 def is_markdown(path: Path) -> bool:
     """Check if a file path has a .md extension."""
     return path.suffix.lower() == ".md"
