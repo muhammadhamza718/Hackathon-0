@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import Any
+from typing import Any, Self
 
 
 def parse(content: str) -> dict[str, str]:
@@ -64,3 +64,39 @@ def strip(content: str) -> str:
     if match:
         return content[match.end():]
     return content
+
+
+class FrontmatterBuilder:
+    """Fluent builder for constructing frontmatter blocks.
+
+    Usage::
+
+        fm = (
+            FrontmatterBuilder()
+            .set("task_id", "PLAN-2026-001")
+            .set("status", "active")
+            .set("priority", "high")
+            .build()
+        )
+    """
+
+    def __init__(self) -> None:
+        self._fields: dict[str, Any] = {}
+
+    def set(self, key: str, value: Any) -> Self:
+        """Set a frontmatter field, returning self for chaining."""
+        self._fields[key] = value
+        return self
+
+    def remove(self, key: str) -> Self:
+        """Remove a field if present, returning self for chaining."""
+        self._fields.pop(key, None)
+        return self
+
+    def build(self) -> str:
+        """Produce the ``---`` delimited frontmatter string."""
+        return build(self._fields)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a copy of the accumulated fields."""
+        return dict(self._fields)
