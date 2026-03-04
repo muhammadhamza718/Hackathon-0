@@ -2,7 +2,15 @@
 
 from __future__ import annotations
 
-from agents.plan_parser import next_pending_step, parse_frontmatter, parse_steps
+import pytest
+
+from agents.plan_parser import (
+    PlanSummary,
+    next_pending_step,
+    parse_frontmatter,
+    parse_steps,
+    summarize_plan,
+)
 
 SAMPLE_PLAN = """---
 task_id: PLAN-2026-001
@@ -76,3 +84,82 @@ class TestNextPendingStep:
     def test_returns_none_when_all_done(self):
         steps = [{"index": 0, "description": "done", "done": True, "requires_hitl": False}]
         assert next_pending_step(steps) is None  # type: ignore[arg-type]
+
+
+COMPLETE_PLAN = """---
+task_id: PLAN-2026-099
+status: active
+priority: low
+---
+## Roadmap
+- [x] Step 1
+- [x] Step 2
+"""
+
+EMPTY_PLAN = """---
+task_id: PLAN-2026-000
+status: draft
+priority: medium
+---
+# No roadmap steps
+"""
+
+
+class TestPlanSummary:
+    """Verify PlanSummary dataclass and its computed properties."""
+
+    def test_progress_pct_partial(self):
+        summary = summarize_plan(SAMPLE_PLAN)
+        assert summary.progress_pct == pytest.approx(33.3, abs=0.1)
+
+    def test_progress_pct_complete(self):
+        summary = summarize_plan(COMPLETE_PLAN)
+        assert summary.progress_pct == 100.0
+
+    def test_progress_pct_empty_plan(self):
+        summary = summarize_plan(EMPTY_PLAN)
+        assert summary.progress_pct == 0.0
+
+    def test_is_complete_false(self):
+        summary = summarize_plan(SAMPLE_PLAN)
+        assert summary.is_complete is False
+
+    def test_is_complete_true(self):
+        summary = summarize_plan(COMPLETE_PLAN)
+        assert summary.is_complete is True
+
+    def test_is_complete_empty(self):
+        summary = summarize_plan(EMPTY_PLAN)
+        assert summary.is_complete is False
+
+    def test_next_step_returns_pending(self):
+        summary = summarize_plan(SAMPLE_PLAN)
+        assert summary.next_step is not None
+        assert summary.next_step["done"] is False
+
+    def test_next_step_none_when_complete(self):
+        summary = summarize_plan(COMPLETE_PLAN)
+        assert summary.next_step is None
+
+    def test_meta_preserved(self):
+        summary = summarize_plan(SAMPLE_PLAN)
+        assert summary.meta["task_id"] == "PLAN-2026-001"
+        assert summary.meta["status"] == "active"
+
+    @pytest.mark.parametrize(
+        "done_count,total,expected_pct",
+        [
+            (0, 5, 0.0),
+            (1, 4, 25.0),
+            (2, 3, 66.7),
+            (5, 5, 100.0),
+        ],
+    )
+    def test_progress_pct_values(self, done_count: int, total: int, expected_pct: float):
+        steps_text = ""
+        for i in range(total):
+            mark = "x" if i < done_count else " "
+            steps_text += f"- [{mark}] Step {i + 1}\n"
+        content = f"---\ntask_id: T\nstatus: active\npriority: low\n---\n## Roadmap\n{steps_text}"
+        summary = summarize_plan(content)
+        assert summary.progress_pct == pytest.approx(expected_pct, abs=0.1)
