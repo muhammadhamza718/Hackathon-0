@@ -6,7 +6,12 @@ from pathlib import Path
 
 import pytest
 
-from agents.reconciler import find_incomplete_plans, prioritize_plans, reconcile
+from agents.reconciler import (
+    ReconcileResult,
+    find_incomplete_plans,
+    prioritize_plans,
+    reconcile,
+)
 
 ACTIVE_PLAN = """---
 task_id: PLAN-2026-001
@@ -33,6 +38,20 @@ Draft plan.
 
 ## Roadmap
 - [ ] Step 1
+"""
+
+HITL_PLAN = """---
+task_id: PLAN-2026-004
+status: active
+priority: high
+created_date: 2026-02-28
+---
+# Objective
+HITL plan.
+
+## Roadmap
+- [x] Step 1
+- [ ] Step 2: Send report ✋
 """
 
 COMPLETE_PLAN = """---
@@ -83,18 +102,69 @@ class TestPrioritizePlans:
         assert names.index("PLAN-2026-001.md") < names.index("PLAN-2026-002.md")
 
 
+class TestReconcileResult:
+    """Verify the ReconcileResult dataclass behaves correctly."""
+
+    def test_has_work_true(self, vault: Path):
+        result = reconcile(vault)
+        assert result.has_work is True
+
+    def test_has_work_false(self, tmp_path: Path):
+        result = reconcile(tmp_path)
+        assert result.has_work is False
+
+    def test_is_frozen(self, vault: Path):
+        result = reconcile(vault)
+        with pytest.raises(AttributeError):
+            result.total_incomplete = 99  # type: ignore[misc]
+
+    def test_next_step_requires_hitl_false(self, vault: Path):
+        result = reconcile(vault)
+        assert result.next_step_requires_hitl is False
+
+    def test_next_step_requires_hitl_true(self, tmp_path: Path):
+        plans = tmp_path / "Plans"
+        plans.mkdir()
+        (plans / "PLAN-2026-004.md").write_text(HITL_PLAN)
+        result = reconcile(tmp_path)
+        assert result.next_step_requires_hitl is True
+
+    def test_hitl_false_when_no_work(self, tmp_path: Path):
+        result = reconcile(tmp_path)
+        assert result.next_step_requires_hitl is False
+
+
 class TestReconcile:
     def test_returns_next_plan(self, vault: Path):
         result = reconcile(vault)
-        assert result["total_incomplete"] == 2
-        assert result["next_plan"] == "PLAN-2026-001.md"
+        assert result.total_incomplete == 2
+        assert result.next_plan == "PLAN-2026-001.md"
 
     def test_next_step_is_pending(self, vault: Path):
         result = reconcile(vault)
-        assert result["next_step"] is not None
-        assert result["next_step"]["done"] is False
+        assert result.next_step is not None
+        assert result.next_step["done"] is False
 
     def test_empty_vault(self, tmp_path: Path):
         result = reconcile(tmp_path)
-        assert result["total_incomplete"] == 0
-        assert result["next_plan"] is None
+        assert result.total_incomplete == 0
+        assert result.next_plan is None
+
+    @pytest.mark.parametrize(
+        "statuses,expected_count",
+        [
+            (["active"], 1),
+            (["active", "draft"], 2),
+            (["complete"], 0),
+            (["complete", "complete"], 0),
+            (["active", "blocked", "draft"], 3),
+        ],
+    )
+    def test_incomplete_counts(self, tmp_path: Path, statuses: list[str], expected_count: int):
+        plans = tmp_path / "Plans"
+        plans.mkdir()
+        for i, status in enumerate(statuses):
+            content = f"---\ntask_id: PLAN-2026-{i:03d}\nstatus: {status}\npriority: medium\n---\n## Roadmap\n- [ ] Step\n"
+            (plans / f"PLAN-2026-{i:03d}.md").write_text(content)
+        result = reconcile(tmp_path)
+        assert result.total_incomplete == expected_count
