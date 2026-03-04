@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import re
 import shutil
+from dataclasses import dataclass
+from enum import Enum, unique
 from pathlib import Path
 
 from agents.constants import (
@@ -14,30 +16,71 @@ from agents.constants import (
 )
 
 
-def classify_task(content: str) -> str:
-    """Classify a task file as simple or complex.
+@unique
+class TaskClassification(Enum):
+    """Classification result for an inbox task."""
 
-    A task is complex if it mentions external actions, multi-step work,
-    or contains HITL markers.
+    SIMPLE = "simple"
+    COMPLEX = "complex"
+
+
+_COMPLEX_SIGNALS: list[tuple[str, str]] = [
+    (r"(?i)\bexternal\b", "references external system"),
+    (r"(?i)\bapi\b", "involves API interaction"),
+    (r"(?i)\bemail\b", "requires sending email"),
+    (r"(?i)\bpayment\b", "involves payment processing"),
+    (r"(?i)\bmulti[- ]?step\b", "multi-step workflow"),
+    (r"✋", "HITL marker present"),
+]
+
+
+@dataclass(frozen=True)
+class ClassificationResult:
+    """Result of task classification with reasoning trail."""
+
+    classification: TaskClassification
+    matched_signals: tuple[str, ...]
+
+    @property
+    def is_complex(self) -> bool:
+        return self.classification is TaskClassification.COMPLEX
+
+
+def classify_task(content: str) -> TaskClassification:
+    """Classify a task file as simple or complex.
 
     Args:
         content: Markdown content of the task file.
 
     Returns:
-        "complex" or "simple"
+        ``TaskClassification.COMPLEX`` or ``TaskClassification.SIMPLE``.
     """
-    complex_signals = [
-        r"(?i)\bexternal\b",
-        r"(?i)\bapi\b",
-        r"(?i)\bemail\b",
-        r"(?i)\bpayment\b",
-        r"(?i)\bmulti[- ]?step\b",
-        r"✋",
-    ]
-    for pattern in complex_signals:
+    return classify_task_detailed(content).classification
+
+
+def classify_task_detailed(content: str) -> ClassificationResult:
+    """Classify with full reasoning trail.
+
+    Args:
+        content: Markdown content of the task file.
+
+    Returns:
+        A ``ClassificationResult`` with matched signal descriptions.
+    """
+    matched: list[str] = []
+    for pattern, reason in _COMPLEX_SIGNALS:
         if re.search(pattern, content):
-            return "complex"
-    return "simple"
+            matched.append(reason)
+
+    if matched:
+        return ClassificationResult(
+            classification=TaskClassification.COMPLEX,
+            matched_signals=tuple(matched),
+        )
+    return ClassificationResult(
+        classification=TaskClassification.SIMPLE,
+        matched_signals=(),
+    )
 
 
 def route_file(file_path: Path, vault_root: Path) -> Path:
@@ -57,9 +100,9 @@ def route_file(file_path: Path, vault_root: Path) -> Path:
         raise FileNotFoundError(f"File not found: {file_path}")
 
     content = file_path.read_text(encoding="utf-8")
-    classification = classify_task(content)
+    result = classify_task_detailed(content)
 
-    if classification == "complex":
+    if result.is_complex:
         dest_dir = vault_root / PENDING_APPROVAL_DIR
     else:
         dest_dir = vault_root / NEEDS_ACTION_DIR
