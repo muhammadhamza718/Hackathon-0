@@ -2,11 +2,32 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
 from agents.constants import LOGS_DIR
 from agents.utils import ensure_dir
+
+
+@dataclass(frozen=True)
+class AuditEntry:
+    """Immutable representation of a single audit log entry."""
+
+    timestamp: str
+    tier: str
+    action: str
+    detail: str
+
+    def format_line(self) -> str:
+        """Format as a markdown log line."""
+        return f"- [{self.timestamp}] [{self.tier}] **{self.action}**: {self.detail}\n"
+
+    @classmethod
+    def now(cls, action: str, detail: str, tier: str = "bronze") -> AuditEntry:
+        """Create an entry timestamped to the current UTC time."""
+        ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+        return cls(timestamp=ts, tier=tier, action=action, detail=detail)
 
 
 def _log_path(vault_root: Path) -> Path:
@@ -34,13 +55,12 @@ def append_log(
         Path to the audit log file.
     """
     log_file = _log_path(vault_root)
-    ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
-    entry = f"- [{ts}] [{tier}] **{action}**: {detail}\n"
+    entry = AuditEntry.now(action=action, detail=detail, tier=tier)
 
     with log_file.open("a", encoding="utf-8") as f:
         if log_file.stat().st_size == 0:
-            f.write(f"# Audit Log — {ts[:10]}\n\n")
-        f.write(entry)
+            f.write(f"# Audit Log — {entry.timestamp[:10]}\n\n")
+        f.write(entry.format_line())
 
     return log_file
 
