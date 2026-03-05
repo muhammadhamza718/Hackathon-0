@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from agents.utils import ensure_dir, safe_read, slugify, utcnow_iso
+from agents.utils import clamp, ensure_dir, file_exists, is_markdown, safe_read, slugify, truncate, utcnow_iso
 
 
 class TestSlugify:
@@ -63,3 +63,58 @@ class TestSafeRead:
 
     def test_returns_none_for_missing(self, tmp_path: Path):
         assert safe_read(tmp_path / "missing.txt") is None
+
+
+class TestFileExists:
+    def test_existing_file(self, tmp_path: Path):
+        f = tmp_path / "file.txt"
+        f.write_text("x")
+        assert file_exists(f) is True
+
+    def test_missing_file(self, tmp_path: Path):
+        assert file_exists(tmp_path / "nope.txt") is False
+
+    def test_directory_returns_false(self, tmp_path: Path):
+        assert file_exists(tmp_path) is False
+
+
+class TestIsMarkdown:
+    @pytest.mark.parametrize(
+        "name,expected",
+        [
+            ("task.md", True),
+            ("README.MD", True),
+            ("image.png", False),
+            ("data.json", False),
+        ],
+    )
+    def test_extension_check(self, name: str, expected: bool):
+        assert is_markdown(Path(name)) is expected
+
+
+class TestTruncate:
+    def test_short_text_unchanged(self):
+        assert truncate("hello", 10) == "hello"
+
+    def test_exact_length_unchanged(self):
+        assert truncate("12345", 5) == "12345"
+
+    def test_long_text_truncated(self):
+        result = truncate("a" * 100, 10)
+        assert len(result) == 10
+        assert result.endswith("...")
+
+
+class TestClamp:
+    @pytest.mark.parametrize(
+        "value,low,high,expected",
+        [
+            (5, 0, 10, 5),
+            (-1, 0, 10, 0),
+            (15, 0, 10, 10),
+            (0, 0, 0, 0),
+            (5, 5, 5, 5),
+        ],
+    )
+    def test_clamp_values(self, value: int, low: int, high: int, expected: int):
+        assert clamp(value, low, high) == expected
