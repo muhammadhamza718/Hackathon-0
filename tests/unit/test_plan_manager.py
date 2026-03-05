@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from agents.plan_manager import create_plan, next_plan_id, update_plan_status
+from agents.plan_manager import PlanStatus, create_plan, next_plan_id, update_plan_status
 
 
 @pytest.fixture
@@ -59,8 +59,45 @@ class TestCreatePlan:
         assert "priority: high" in path.read_text()
 
 
+class TestPlanStatusEnum:
+    """Verify PlanStatus enum values and properties."""
+
+    @pytest.mark.parametrize(
+        "status,expected_terminal",
+        [
+            (PlanStatus.DRAFT, False),
+            (PlanStatus.ACTIVE, False),
+            (PlanStatus.COMPLETE, True),
+            (PlanStatus.CANCELLED, True),
+        ],
+    )
+    def test_is_terminal(self, status: PlanStatus, expected_terminal: bool):
+        assert status.is_terminal is expected_terminal
+
+    def test_values_are_unique(self):
+        values = [s.value for s in PlanStatus]
+        assert len(values) == len(set(values))
+
+
 class TestUpdatePlanStatus:
-    def test_updates_status(self, vault: Path):
+    def test_updates_status_string(self, vault: Path):
         path = create_plan(vault, "Obj", ["S1"])
         update_plan_status(path, "active")
         assert "status: active" in path.read_text()
+
+    def test_updates_status_enum(self, vault: Path):
+        path = create_plan(vault, "Obj", ["S1"])
+        update_plan_status(path, PlanStatus.ACTIVE)
+        assert "status: active" in path.read_text()
+
+    def test_updates_to_complete(self, vault: Path):
+        path = create_plan(vault, "Obj", ["S1"])
+        update_plan_status(path, PlanStatus.COMPLETE)
+        assert "status: complete" in path.read_text()
+
+    def test_preserves_other_fields(self, vault: Path):
+        path = create_plan(vault, "Obj", ["S1"], priority="high")
+        update_plan_status(path, PlanStatus.ACTIVE)
+        content = path.read_text()
+        assert "priority: high" in content
+        assert "status: active" in content
