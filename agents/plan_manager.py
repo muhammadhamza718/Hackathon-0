@@ -2,11 +2,28 @@
 
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
+from enum import Enum, unique
 from pathlib import Path
 
 from agents.constants import PLANS_DIR, STATUS_DRAFT
 from agents.utils import ensure_dir
+
+
+@unique
+class PlanStatus(Enum):
+    """Lifecycle status of a plan."""
+
+    DRAFT = "draft"
+    ACTIVE = "active"
+    COMPLETE = "complete"
+    CANCELLED = "cancelled"
+
+    @property
+    def is_terminal(self) -> bool:
+        """True when the plan can no longer transition."""
+        return self in (PlanStatus.COMPLETE, PlanStatus.CANCELLED)
 
 
 def next_plan_id(vault_root: Path) -> str:
@@ -77,18 +94,18 @@ created_date: {now}
     return path
 
 
-def update_plan_status(plan_path: Path, new_status: str) -> None:
+def update_plan_status(plan_path: Path, new_status: str | PlanStatus) -> None:
     """Update the status field in a plan file's frontmatter.
 
     Args:
         plan_path: Path to the plan file.
-        new_status: New status value.
+        new_status: New status value (string or PlanStatus enum).
     """
+    status_value = new_status.value if isinstance(new_status, PlanStatus) else new_status
     content = plan_path.read_text(encoding="utf-8")
-    import re
     content = re.sub(
         r"^status:\s*\S+",
-        f"status: {new_status}",
+        f"status: {status_value}",
         content,
         count=1,
         flags=re.MULTILINE,
