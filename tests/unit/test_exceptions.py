@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from agents.exceptions import (
     AgentError,
     ApprovalTimeoutError,
@@ -12,6 +14,8 @@ from agents.exceptions import (
     PlanNotFoundError,
     PlanValidationError,
     ReconciliationError,
+    ScanError,
+    TemplateError,
     VaultError,
     VaultStructureError,
 )
@@ -49,15 +53,32 @@ class TestExceptionHierarchy:
         assert issubclass(ConfigurationError, AgentError)
 
 
+class TestShortName:
+    """Verify short_name property across exception hierarchy."""
+
+    @pytest.mark.parametrize(
+        "exc_cls,expected_name",
+        [
+            (AgentError, "AgentError"),
+            (VaultError, "VaultError"),
+            (VaultStructureError, "VaultStructureError"),
+            (FileRoutingError, "FileRoutingError"),
+            (PlanNotFoundError, "PlanNotFoundError"),
+            (ApprovalTimeoutError, "ApprovalTimeoutError"),
+            (ScanError, "ScanError"),
+            (TemplateError, "TemplateError"),
+        ],
+    )
+    def test_short_name(self, exc_cls: type, expected_name: str):
+        err = exc_cls("test message")
+        assert err.short_name == expected_name
+
+
 class TestExceptionMessages:
     def test_can_raise_with_message(self):
-        try:
+        with pytest.raises(VaultStructureError, match="Missing Inbox"):
             raise VaultStructureError("Missing Inbox directory")
-        except VaultStructureError as e:
-            assert "Missing Inbox" in str(e)
 
     def test_catch_by_base(self):
-        try:
+        with pytest.raises(AgentError, match="PLAN-2026-001"):
             raise PlanNotFoundError("PLAN-2026-001 not found")
-        except AgentError as e:
-            assert "PLAN-2026-001" in str(e)
