@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 
 from agents.constants import (
@@ -28,7 +29,26 @@ REQUIRED_DIRS = [
 ]
 
 
-def init_vault(vault_root: Path) -> list[Path]:
+@dataclass(frozen=True)
+class InitResult:
+    """Immutable result of vault initialization."""
+
+    created_dirs: tuple[Path, ...]
+    created_files: tuple[Path, ...]
+    vault_root: Path
+
+    @property
+    def total_created(self) -> int:
+        """Total number of new directories and files created."""
+        return len(self.created_dirs) + len(self.created_files)
+
+    @property
+    def was_fresh(self) -> bool:
+        """True when something was actually created (not pre-existing)."""
+        return self.total_created > 0
+
+
+def init_vault(vault_root: Path) -> InitResult:
     """Initialize vault directory structure.
 
     Creates all required directories if they don't exist.
@@ -37,14 +57,15 @@ def init_vault(vault_root: Path) -> list[Path]:
         vault_root: Root directory for the vault.
 
     Returns:
-        List of directories that were created (already existing dirs excluded).
+        ``InitResult`` with created directories and files.
     """
-    created: list[Path] = []
+    created_dirs: list[Path] = []
+    created_files: list[Path] = []
     for dirname in REQUIRED_DIRS:
         dirpath = vault_root / dirname
         if not dirpath.exists():
             dirpath.mkdir(parents=True)
-            created.append(dirpath)
+            created_dirs.append(dirpath)
 
     # Create empty Dashboard.md if not present
     dashboard = vault_root / DASHBOARD_FILE
@@ -53,9 +74,13 @@ def init_vault(vault_root: Path) -> list[Path]:
             "# Dashboard\n\n*Run the agent to populate this file.*\n",
             encoding="utf-8",
         )
-        created.append(dashboard)
+        created_files.append(dashboard)
 
-    return created
+    return InitResult(
+        created_dirs=tuple(created_dirs),
+        created_files=tuple(created_files),
+        vault_root=vault_root,
+    )
 
 
 def is_vault_initialized(vault_root: Path) -> bool:
