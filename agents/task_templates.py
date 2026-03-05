@@ -3,6 +3,39 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from enum import Enum, unique
+
+
+@unique
+class TemplateType(Enum):
+    """Available task template types."""
+
+    SIMPLE = "simple"
+    HITL = "hitl"
+
+
+def render_template(
+    template_type: TemplateType,
+    title: str,
+    description: str,
+    priority: str = "medium",
+    action: str = "",
+) -> str:
+    """Render a task template by type.
+
+    Args:
+        template_type: Which template to use.
+        title: Task title.
+        description: Task description.
+        priority: Priority level.
+        action: External action (required for HITL templates).
+
+    Returns:
+        Formatted markdown string.
+    """
+    if template_type is TemplateType.HITL:
+        return hitl_task_template(title, description, action=action, priority=priority)
+    return simple_task_template(title, description, priority=priority)
 
 
 def simple_task_template(title: str, description: str, priority: str = "medium") -> str:
