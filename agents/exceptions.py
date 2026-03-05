@@ -22,6 +22,11 @@ __all__ = [
 class AgentError(Exception):
     """Base exception for all agent errors."""
 
+    @property
+    def short_name(self) -> str:
+        """Return the unqualified class name for logging."""
+        return type(self).__name__
+
 
 class VaultError(AgentError):
     """Error related to vault operations."""
