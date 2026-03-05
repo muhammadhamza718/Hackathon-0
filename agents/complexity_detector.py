@@ -4,19 +4,34 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from enum import IntEnum, unique
 
 
-@dataclass
+@unique
+class ComplexityLevel(IntEnum):
+    """Complexity classification with natural ordering."""
+
+    SIMPLE = 0
+    COMPLEX = 1
+
+    @classmethod
+    def from_score(cls, score: int, threshold: int = 3) -> ComplexityLevel:
+        """Derive level from a numeric score."""
+        return cls.COMPLEX if score >= threshold else cls.SIMPLE
+
+
+@dataclass(frozen=True)
 class ComplexityResult:
-    """Result of complexity analysis."""
-    level: str  # "simple" or "complex"
+    """Immutable result of complexity analysis."""
+
+    level: ComplexityLevel
     score: int  # 0-10 complexity score
-    reasons: list[str]  # Why it's complex
+    reasons: tuple[str, ...]  # Why it's complex (immutable)
 
     @property
     def is_complex(self) -> bool:
         """Convenience check for complex tasks."""
-        return self.level == "complex"
+        return self.level is ComplexityLevel.COMPLEX
 
 
 # Patterns that signal complexity
@@ -71,5 +86,6 @@ def detect_complexity(content: str) -> ComplexityResult:
         score += 1
         reasons.append("lengthy description")
 
-    level = "complex" if score >= 3 else "simple"
-    return ComplexityResult(level=level, score=min(score, 10), reasons=reasons)
+    capped_score = min(score, 10)
+    level = ComplexityLevel.from_score(capped_score)
+    return ComplexityResult(level=level, score=capped_score, reasons=tuple(reasons))
