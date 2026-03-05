@@ -6,7 +6,13 @@ from pathlib import Path
 
 import pytest
 
-from agents.dashboard_writer import count_files, generate_dashboard, write_dashboard
+from agents.dashboard_writer import (
+    VaultStatus,
+    count_files,
+    generate_dashboard,
+    snapshot_vault,
+    write_dashboard,
+)
 
 
 @pytest.fixture
@@ -59,3 +65,64 @@ class TestWriteDashboard:
         path = write_dashboard(vault)
         content = path.read_text()
         assert content.startswith("# Dashboard")
+
+
+class TestVaultStatus:
+    """Verify frozen VaultStatus dataclass."""
+
+    def test_total_sums_all_folders(self):
+        status = VaultStatus(
+            inbox=1, needs_action=2, pending_approval=3,
+            approved=4, rejected=0, done=5, plans=1, logs=2,
+        )
+        assert status.total == 18
+
+    def test_total_empty(self):
+        status = VaultStatus(
+            inbox=0, needs_action=0, pending_approval=0,
+            approved=0, rejected=0, done=0, plans=0, logs=0,
+        )
+        assert status.total == 0
+
+    def test_has_actionable_items_inbox(self):
+        status = VaultStatus(
+            inbox=1, needs_action=0, pending_approval=0,
+            approved=0, rejected=0, done=0, plans=0, logs=0,
+        )
+        assert status.has_actionable_items is True
+
+    def test_has_actionable_items_needs_action(self):
+        status = VaultStatus(
+            inbox=0, needs_action=3, pending_approval=0,
+            approved=0, rejected=0, done=0, plans=0, logs=0,
+        )
+        assert status.has_actionable_items is True
+
+    def test_no_actionable_items(self):
+        status = VaultStatus(
+            inbox=0, needs_action=0, pending_approval=5,
+            approved=0, rejected=0, done=0, plans=0, logs=0,
+        )
+        assert status.has_actionable_items is False
+
+    def test_frozen(self):
+        status = VaultStatus(
+            inbox=0, needs_action=0, pending_approval=0,
+            approved=0, rejected=0, done=0, plans=0, logs=0,
+        )
+        with pytest.raises(AttributeError):
+            status.inbox = 5  # type: ignore[misc]
+
+
+class TestSnapshotVault:
+    def test_captures_counts(self, vault: Path):
+        (vault / "Inbox" / "a.md").write_text("x")
+        (vault / "Done" / "b.md").write_text("y")
+        status = snapshot_vault(vault)
+        assert status.inbox == 1
+        assert status.done == 1
+        assert status.total == 2
+
+    def test_empty_vault(self, vault: Path):
+        status = snapshot_vault(vault)
+        assert status.total == 0
