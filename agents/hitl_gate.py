@@ -3,10 +3,25 @@
 from __future__ import annotations
 
 import shutil
+from enum import Enum, unique
 from pathlib import Path
 
 from agents.constants import APPROVED_DIR, PENDING_APPROVAL_DIR, REJECTED_DIR
 from agents.utils import ensure_dir
+
+
+@unique
+class Decision(Enum):
+    """Outcome of a human review decision."""
+
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    PENDING = "pending"
+
+    @property
+    def is_final(self) -> bool:
+        """True when the decision is terminal (not pending)."""
+        return self is not Decision.PENDING
 
 
 class HITLGate:
@@ -67,20 +82,20 @@ class HITLGate:
         """
         return (self.rejected_dir / filename).exists()
 
-    def check_decision(self, filename: str) -> str:
+    def check_decision(self, filename: str) -> Decision:
         """Check the human decision for a pending item.
 
         Args:
             filename: Name of the file.
 
         Returns:
-            "approved", "rejected", or "pending"
+            ``Decision`` enum value.
         """
         if self.is_approved(filename):
-            return "approved"
+            return Decision.APPROVED
         if self.is_rejected(filename):
-            return "rejected"
-        return "pending"
+            return Decision.REJECTED
+        return Decision.PENDING
 
     @property
     def pending_count(self) -> int:
