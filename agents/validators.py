@@ -3,7 +3,31 @@
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from pathlib import Path
+
+
+@dataclass(frozen=True)
+class ValidationResult:
+    """Immutable result of a validation check."""
+
+    valid: bool
+    errors: tuple[str, ...]
+
+    @property
+    def error_count(self) -> int:
+        """Number of validation errors."""
+        return len(self.errors)
+
+    @classmethod
+    def ok(cls) -> ValidationResult:
+        """Create a passing validation result."""
+        return cls(valid=True, errors=())
+
+    @classmethod
+    def fail(cls, errors: list[str]) -> ValidationResult:
+        """Create a failing validation result."""
+        return cls(valid=False, errors=tuple(errors))
 
 
 def is_valid_plan_id(plan_id: str) -> bool:
@@ -86,27 +110,31 @@ def is_safe_filename(name: str) -> bool:
     return bool(re.match(r"^[\w\-. ]+$", name))
 
 
-def validate_vault_structure(vault_root: Path) -> list[str]:
+_REQUIRED_DIRS = (
+    "Inbox",
+    "Needs_Action",
+    "Done",
+    "Pending_Approval",
+    "Approved",
+    "Rejected",
+    "Plans",
+    "Logs",
+)
+
+
+def validate_vault_structure(vault_root: Path) -> ValidationResult:
     """Validate that a vault has the required directory structure.
 
     Args:
         vault_root: Root path of the vault.
 
     Returns:
-        List of error messages. Empty list means valid.
+        ``ValidationResult`` with any missing directory errors.
     """
-    required = [
-        "Inbox",
-        "Needs_Action",
-        "Done",
-        "Pending_Approval",
-        "Approved",
-        "Rejected",
-        "Plans",
-        "Logs",
-    ]
-    errors = []
-    for d in required:
+    errors: list[str] = []
+    for d in _REQUIRED_DIRS:
         if not (vault_root / d).is_dir():
             errors.append(f"Missing required directory: {d}")
-    return errors
+    if errors:
+        return ValidationResult.fail(errors)
+    return ValidationResult.ok()
