@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -16,6 +17,48 @@ from agents.constants import (
     PLANS_DIR,
     REJECTED_DIR,
 )
+
+
+@dataclass(frozen=True)
+class VaultStatus:
+    """Immutable snapshot of vault folder counts."""
+
+    inbox: int
+    needs_action: int
+    pending_approval: int
+    approved: int
+    rejected: int
+    done: int
+    plans: int
+    logs: int
+
+    @property
+    def total(self) -> int:
+        """Total file count across all folders."""
+        return (
+            self.inbox + self.needs_action + self.pending_approval
+            + self.approved + self.rejected + self.done
+            + self.plans + self.logs
+        )
+
+    @property
+    def has_actionable_items(self) -> bool:
+        """True when inbox or needs_action contain files."""
+        return self.inbox > 0 or self.needs_action > 0
+
+
+def snapshot_vault(vault_root: Path) -> VaultStatus:
+    """Capture current vault folder counts as an immutable snapshot."""
+    return VaultStatus(
+        inbox=count_files(vault_root / INBOX_DIR),
+        needs_action=count_files(vault_root / NEEDS_ACTION_DIR),
+        pending_approval=count_files(vault_root / PENDING_APPROVAL_DIR),
+        approved=count_files(vault_root / APPROVED_DIR),
+        rejected=count_files(vault_root / REJECTED_DIR),
+        done=count_files(vault_root / DONE_DIR),
+        plans=count_files(vault_root / PLANS_DIR),
+        logs=count_files(vault_root / LOGS_DIR),
+    )
 
 
 def count_files(directory: Path) -> int:
