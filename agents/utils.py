@@ -6,7 +6,16 @@ import re
 from datetime import datetime, timezone
 from pathlib import Path
 
-__all__ = ["utcnow_iso", "slugify", "ensure_dir", "safe_read", "file_exists", "is_markdown", "truncate"]
+__all__ = [
+    "utcnow_iso",
+    "slugify",
+    "ensure_dir",
+    "safe_read",
+    "file_exists",
+    "is_markdown",
+    "truncate",
+    "clamp",
+]
 
 
 def utcnow_iso() -> str:
@@ -73,3 +82,17 @@ def truncate(text: str, max_len: int = 80) -> str:
     if len(text) <= max_len:
         return text
     return text[: max_len - 3] + "..."
+
+
+def clamp(value: int, low: int, high: int) -> int:
+    """Clamp an integer to [low, high] range inclusive.
+
+    Args:
+        value: The value to clamp.
+        low: Minimum allowed value.
+        high: Maximum allowed value.
+
+    Returns:
+        The clamped value.
+    """
+    return max(low, min(value, high))
