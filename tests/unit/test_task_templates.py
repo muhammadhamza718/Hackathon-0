@@ -2,7 +2,14 @@
 
 from __future__ import annotations
 
-from agents.task_templates import hitl_task_template, simple_task_template
+import pytest
+
+from agents.task_templates import (
+    TemplateType,
+    hitl_task_template,
+    render_template,
+    simple_task_template,
+)
 
 
 class TestSimpleTaskTemplate:
@@ -47,3 +54,42 @@ class TestHitlTaskTemplate:
     def test_default_high_priority(self):
         md = hitl_task_template("T", "D", "A")
         assert "priority: high" in md
+
+
+class TestTemplateType:
+    """Verify TemplateType enum values."""
+
+    def test_simple_value(self):
+        assert TemplateType.SIMPLE.value == "simple"
+
+    def test_hitl_value(self):
+        assert TemplateType.HITL.value == "hitl"
+
+    def test_members_unique(self):
+        values = [t.value for t in TemplateType]
+        assert len(values) == len(set(values))
+
+
+class TestRenderTemplate:
+    """Verify render_template dispatcher."""
+
+    def test_simple_dispatch(self):
+        md = render_template(TemplateType.SIMPLE, "Task", "Desc")
+        assert "Acceptance Criteria" in md
+        assert "✋" not in md
+
+    def test_hitl_dispatch(self):
+        md = render_template(TemplateType.HITL, "Task", "Desc", action="Send email")
+        assert "✋" in md
+        assert "Send email" in md
+
+    @pytest.mark.parametrize(
+        "ttype,expected_in",
+        [
+            (TemplateType.SIMPLE, "Acceptance Criteria"),
+            (TemplateType.HITL, "Approval Status"),
+        ],
+    )
+    def test_dispatch_sections(self, ttype: TemplateType, expected_in: str):
+        md = render_template(ttype, "T", "D", action="A")
+        assert expected_in in md
