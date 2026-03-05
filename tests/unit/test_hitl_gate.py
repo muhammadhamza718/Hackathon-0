@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from agents.hitl_gate import HITLGate
+from agents.hitl_gate import Decision, HITLGate
 
 
 @pytest.fixture
@@ -19,6 +19,30 @@ def vault(tmp_path: Path) -> Path:
 @pytest.fixture
 def gate(vault: Path) -> HITLGate:
     return HITLGate(vault)
+
+
+class TestDecisionEnum:
+    """Verify Decision enum values and properties."""
+
+    def test_approved_value(self):
+        assert Decision.APPROVED.value == "approved"
+
+    def test_rejected_value(self):
+        assert Decision.REJECTED.value == "rejected"
+
+    def test_pending_value(self):
+        assert Decision.PENDING.value == "pending"
+
+    @pytest.mark.parametrize(
+        "decision,expected",
+        [
+            (Decision.APPROVED, True),
+            (Decision.REJECTED, True),
+            (Decision.PENDING, False),
+        ],
+    )
+    def test_is_final(self, decision: Decision, expected: bool):
+        assert decision.is_final is expected
 
 
 class TestSubmitForApproval:
@@ -45,12 +69,29 @@ class TestGetPending:
 
 class TestCheckDecision:
     def test_pending(self, gate: HITLGate):
-        assert gate.check_decision("task.md") == "pending"
+        assert gate.check_decision("task.md") is Decision.PENDING
 
     def test_approved(self, vault: Path, gate: HITLGate):
         (vault / "Approved" / "task.md").write_text("yes")
-        assert gate.check_decision("task.md") == "approved"
+        assert gate.check_decision("task.md") is Decision.APPROVED
 
     def test_rejected(self, vault: Path, gate: HITLGate):
         (vault / "Rejected" / "task.md").write_text("no")
-        assert gate.check_decision("task.md") == "rejected"
+        assert gate.check_decision("task.md") is Decision.REJECTED
+
+    def test_approved_is_final(self, vault: Path, gate: HITLGate):
+        (vault / "Approved" / "task.md").write_text("yes")
+        assert gate.check_decision("task.md").is_final is True
+
+    def test_pending_not_final(self, gate: HITLGate):
+        assert gate.check_decision("task.md").is_final is False
+
+
+class TestPendingCount:
+    def test_zero_when_empty(self, gate: HITLGate):
+        assert gate.pending_count == 0
+
+    def test_counts_md_files(self, vault: Path, gate: HITLGate):
+        (vault / "Pending_Approval" / "a.md").write_text("x")
+        (vault / "Pending_Approval" / "b.md").write_text("y")
+        assert gate.pending_count == 2
