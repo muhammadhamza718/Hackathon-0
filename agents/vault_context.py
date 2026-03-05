@@ -33,10 +33,10 @@ def vault_session(
     Raises:
         VaultStructureError: If required directories are missing.
     """
-    errors = validate_vault_structure(vault_root)
-    if errors:
+    result = validate_vault_structure(vault_root)
+    if not result.valid:
         raise VaultStructureError(
-            f"Vault at {vault_root} is invalid: {'; '.join(errors)}"
+            f"Vault at {vault_root} is invalid: {'; '.join(result.errors)}"
         )
 
     append_log(vault_root, "session_start", f"Opened {tier} session", tier=tier)
