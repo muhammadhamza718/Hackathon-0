@@ -4,16 +4,28 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from enum import Enum
+from enum import Enum, unique
 from pathlib import Path
 
 
+@unique
 class EventType(Enum):
     """Types of file system events."""
+
     CREATED = "created"
     MODIFIED = "modified"
     DELETED = "deleted"
     MOVED = "moved"
+
+    @property
+    def is_destructive(self) -> bool:
+        """True when the event represents file removal."""
+        return self is EventType.DELETED
+
+    @property
+    def requires_content_read(self) -> bool:
+        """True when the file content should be readable after the event."""
+        return self in (EventType.CREATED, EventType.MODIFIED)
 
 
 @dataclass(frozen=True)
