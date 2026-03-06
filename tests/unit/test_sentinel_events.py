@@ -80,3 +80,12 @@ class TestFileEvent:
     def test_default_dest_path_none(self):
         e = FileEvent(EventType.CREATED, Path("task.md"))
         assert e.dest_path is None
+
+    def test_for_path_with_string(self):
+        e = FileEvent.for_path(EventType.CREATED, "/vault/Inbox/task.md")
+        assert isinstance(e.path, Path)
+        assert e.filename == "task.md"
+
+    def test_for_path_with_path(self):
+        e = FileEvent.for_path(EventType.MODIFIED, Path("file.md"))
+        assert e.event_type is EventType.MODIFIED
