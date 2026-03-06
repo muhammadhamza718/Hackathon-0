@@ -4,9 +4,9 @@ from sentinel.base import BaseWatcher
 from sentinel.config import WatcherConfig
 from sentinel.events import EventType, FileEvent
 from sentinel.filesystem import FileSystemWatcher
-from sentinel.health import HealthChecker
+from sentinel.health import HealthChecker, HealthState, HealthStatus
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 __all__ = [
     "BaseWatcher",
     "WatcherConfig",
@@ -14,5 +14,7 @@ __all__ = [
     "FileEvent",
     "FileSystemWatcher",
     "HealthChecker",
+    "HealthState",
+    "HealthStatus",
     "__version__",
 ]
