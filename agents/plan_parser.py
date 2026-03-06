@@ -70,6 +70,16 @@ def parse_steps(content: str) -> list[PlanStep]:
     return steps
 
 
+def has_hitl_marker(content: str) -> bool:
+    """Check if any step in the plan requires HITL approval."""
+    return any(step["requires_hitl"] for step in parse_steps(content))
+
+
+def step_count(content: str) -> int:
+    """Count total steps in a plan file."""
+    return len(parse_steps(content))
+
+
 def next_pending_step(steps: list[PlanStep]) -> PlanStep | None:
     """Return the first incomplete step, or None if all done."""
     for step in steps:
