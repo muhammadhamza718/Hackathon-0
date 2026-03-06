@@ -8,6 +8,7 @@ import pytest
 
 from agents.reconciler import (
     ReconcileResult,
+    ReconcileStrategy,
     find_incomplete_plans,
     prioritize_plans,
     reconcile,
@@ -168,3 +169,24 @@ class TestReconcile:
             (plans / f"PLAN-2026-{i:03d}.md").write_text(content)
         result = reconcile(tmp_path)
         assert result.total_incomplete == expected_count
+
+
+class TestReconcileStrategy:
+    """Verify strategy-based plan selection."""
+
+    def test_default_is_priority_first(self, vault: Path):
+        result = reconcile(vault)
+        assert result.next_plan == "PLAN-2026-001.md"
+
+    def test_newest_first(self, vault: Path):
+        result = reconcile(vault, strategy=ReconcileStrategy.NEWEST_FIRST)
+        assert result.next_plan == "PLAN-2026-002.md"
+
+    def test_oldest_first(self, vault: Path):
+        result = reconcile(vault, strategy=ReconcileStrategy.OLDEST_FIRST)
+        assert result.next_plan == "PLAN-2026-001.md"
+
+    def test_empty_vault_all_strategies(self, tmp_path: Path):
+        for strategy in ReconcileStrategy:
+            result = reconcile(tmp_path, strategy=strategy)
+            assert result.has_work is False
