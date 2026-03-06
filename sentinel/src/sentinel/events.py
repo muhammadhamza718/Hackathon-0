@@ -58,6 +58,11 @@ class FileEvent:
         """Check if the file is a markdown file."""
         return self.extension == ".md"
 
+    @classmethod
+    def for_path(cls, event_type: EventType, path: Path | str) -> FileEvent:
+        """Factory to create a FileEvent from a path string or Path."""
+        return cls(event_type=event_type, path=Path(path))
+
     def __str__(self) -> str:
         ts = self.timestamp.strftime("%H:%M:%S")
         return f"[{ts}] {self.event_type.value}: {self.filename}"
