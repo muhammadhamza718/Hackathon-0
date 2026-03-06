@@ -11,6 +11,7 @@ __all__ = [
     "slugify",
     "ensure_dir",
     "safe_read",
+    "safe_write",
     "file_exists",
     "is_markdown",
     "truncate",
@@ -96,3 +97,21 @@ def clamp(value: int, low: int, high: int) -> int:
         The clamped value.
     """
     return max(low, min(value, high))
+
+
+def safe_write(path: Path, content: str) -> bool:
+    """Write content to a file, returning success status.
+
+    Args:
+        path: File path to write.
+        content: String content to write.
+
+    Returns:
+        True if written successfully, False on error.
+    """
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+        return True
+    except OSError:
+        return False
