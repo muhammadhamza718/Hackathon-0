@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from agents.audit_logger import append_log, read_log
+from agents.audit_logger import append_log, parse_log_entries, read_log
 from agents.hitl_gate import HITLGate
 from agents.vault_router import route_file
 
@@ -60,3 +60,15 @@ class TestAuditLogIntegrity:
         log = read_log(vault)
         lines = [l for l in log.splitlines() if l.startswith("- [")]
         assert len(lines) == 4
+
+    def test_parse_roundtrip(self, vault: Path):
+        append_log(vault, "route", "Routed file.md", tier="silver")
+        append_log(vault, "approve", "Approved file.md", tier="gold")
+
+        content = read_log(vault)
+        entries = parse_log_entries(content)
+        assert len(entries) == 2
+        assert entries[0].action == "route"
+        assert entries[0].tier == "silver"
+        assert entries[1].action == "approve"
+        assert entries[1].tier == "gold"

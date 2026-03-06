@@ -1,7 +1,7 @@
 [project]
 name = "personal-ai-employee"
-version = "0.3.0"
-description = "Obsidian Vault-based AI Employee with Bronze-Silver tiered architecture"
+version = "0.5.0"
+description = "Obsidian Vault-based AI Employee with Bronze-Silver-Gold tiered architecture"
 requires-python = ">=3.11"
 authors = [
     { name = "muhammadhamza718" },
@@ -11,7 +11,11 @@ license = { text = "MIT" }
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = [".", "sentinel/src"]
-addopts = "-v --tb=short"
+addopts = "-v --tb=short --strict-markers"
+markers = [
+    "e2e: end-to-end tests requiring full vault setup",
+    "slow: tests that take more than 5 seconds",
+]
 
 [tool.ruff]
 target-version = "py311"

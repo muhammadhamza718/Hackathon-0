@@ -2,24 +2,27 @@
 
 from agents.audit_logger import AuditEntry
 from agents.complexity_detector import ComplexityLevel, ComplexityResult
+from agents.constants import Tier
 from agents.dashboard_writer import VaultStatus
 from agents.exceptions import AgentError, VaultError, VaultStructureError
 from agents.hitl_gate import Decision
 from agents.inbox_scanner import Priority, ScanResult
 from agents.plan_manager import PlanStatus
 from agents.plan_parser import PlanSummary
-from agents.reconciler import ReconcileResult
+from agents.reconciler import ReconcileResult, ReconcileStrategy
 from agents.validators import ValidationResult
 from agents.vault_context import vault_session
 from agents.vault_init import InitResult
 from agents.vault_router import ClassificationResult, TaskClassification
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"
 __author__ = "muhammadhamza718"
 
 __all__ = [
     "__version__",
     "__author__",
+    # Core enums
+    "Tier",
     # Exceptions
     "AgentError",
     "VaultError",
@@ -37,6 +40,7 @@ __all__ = [
     "PlanSummary",
     # Reconciliation
     "ReconcileResult",
+    "ReconcileStrategy",
     # HITL
     "Decision",
     # Audit
