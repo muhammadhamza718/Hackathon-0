@@ -4,19 +4,47 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from enum import Enum, unique
 from pathlib import Path
 
 
-@dataclass
+@unique
+class HealthState(Enum):
+    """Overall health classification."""
+
+    HEALTHY = "healthy"
+    DEGRADED = "degraded"
+    UNHEALTHY = "unhealthy"
+
+
+@dataclass(frozen=True)
 class HealthStatus:
-    """Sentinel health check result."""
-    healthy: bool
+    """Immutable sentinel health check result."""
+
+    state: HealthState
     watch_dir_exists: bool
     inbox_dir_exists: bool
     observer_running: bool
     uptime_seconds: float
     files_processed: int
     last_check: str
+
+    @property
+    def healthy(self) -> bool:
+        """Backwards-compatible boolean health check."""
+        return self.state is HealthState.HEALTHY
+
+    @property
+    def issues(self) -> tuple[str, ...]:
+        """List of current health issues."""
+        problems: list[str] = []
+        if not self.watch_dir_exists:
+            problems.append("watch directory missing")
+        if not self.inbox_dir_exists:
+            problems.append("inbox directory missing")
+        if not self.observer_running:
+            problems.append("observer not running")
+        return tuple(problems)
 
 
 class HealthChecker:
@@ -50,10 +78,16 @@ class HealthChecker:
         now = datetime.now(timezone.utc).isoformat()
         watch_ok = self.watch_dir.exists() and self.watch_dir.is_dir()
         inbox_ok = self.inbox_dir.exists() and self.inbox_dir.is_dir()
-        healthy = watch_ok and inbox_ok and observer_running
+
+        if watch_ok and inbox_ok and observer_running:
+            state = HealthState.HEALTHY
+        elif watch_ok and inbox_ok:
+            state = HealthState.DEGRADED
+        else:
+            state = HealthState.UNHEALTHY
 
         return HealthStatus(
-            healthy=healthy,
+            state=state,
             watch_dir_exists=watch_ok,
             inbox_dir_exists=inbox_ok,
             observer_running=observer_running,
