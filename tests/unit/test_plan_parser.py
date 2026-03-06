@@ -6,9 +6,11 @@ import pytest
 
 from agents.plan_parser import (
     PlanSummary,
+    has_hitl_marker,
     next_pending_step,
     parse_frontmatter,
     parse_steps,
+    step_count,
     summarize_plan,
 )
 
@@ -84,6 +86,26 @@ class TestNextPendingStep:
     def test_returns_none_when_all_done(self):
         steps = [{"index": 0, "description": "done", "done": True, "requires_hitl": False}]
         assert next_pending_step(steps) is None  # type: ignore[arg-type]
+
+
+class TestHasHitlMarker:
+    def test_with_hitl(self):
+        assert has_hitl_marker(SAMPLE_PLAN) is True
+
+    def test_without_hitl(self):
+        content = "---\ntask_id: T\nstatus: active\npriority: low\n---\n## Roadmap\n- [ ] Step 1\n"
+        assert has_hitl_marker(content) is False
+
+    def test_empty_plan(self):
+        assert has_hitl_marker("no steps here") is False
+
+
+class TestStepCount:
+    def test_sample_plan(self):
+        assert step_count(SAMPLE_PLAN) == 3
+
+    def test_no_steps(self):
+        assert step_count("# No roadmap") == 0
 
 
 COMPLETE_PLAN = """---
