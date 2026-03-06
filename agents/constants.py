@@ -72,3 +72,41 @@ HITL_TIMEOUT_SECONDS = 3600  # 1 hour
 TIER_BRONZE = "bronze"
 TIER_SILVER = "silver"
 TIER_GOLD = "gold"
+
+# Gold Tier: loop state file
+LOOP_STATE_FILE = "loop-state.json"
+
+# Gold Tier: file prefixes
+BRIEFING_PREFIX = "CEO-Briefing-"
+QUARANTINE_PREFIX = "[QUARANTINED]_"
+
+# Gold Tier: HITL thresholds
+PAYMENT_APPROVAL_THRESHOLD = 100.0
+
+# Gold Tier: resilience defaults
+MAX_RETRIES = 5
+BACKOFF_BASE_SECONDS = 1.0
+BACKOFF_MAX_SECONDS = 60.0
+CIRCUIT_BREAKER_THRESHOLD = 3
+
+# Gold Tier: valid Gold audit actions
+GOLD_ACTIONS = frozenset(
+    {
+        "odoo_read",
+        "odoo_write_draft",
+        "social_draft",
+        "social_post",
+        "ceo_briefing",
+        "subscription_audit",
+        "circuit_breaker",
+        "retry",
+        "quarantine",
+        # inherited
+        "triage",
+        "complete",
+        "move",
+        "create",
+        "update_dashboard",
+        "error",
+    }
+)
