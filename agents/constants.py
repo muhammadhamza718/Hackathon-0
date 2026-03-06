@@ -1,5 +1,27 @@
 """Shared constants for AI Employee agents."""
 
+from enum import Enum, unique
+
+
+@unique
+class Tier(Enum):
+    """Agent capability tiers."""
+
+    BRONZE = "bronze"
+    SILVER = "silver"
+    GOLD = "gold"
+
+    @property
+    def can_use_hitl(self) -> bool:
+        """True when the tier supports human-in-the-loop gates."""
+        return self in (Tier.SILVER, Tier.GOLD)
+
+    @property
+    def can_act_externally(self) -> bool:
+        """True when the tier can perform external actions (with approval)."""
+        return self is Tier.GOLD
+
+
 # Vault folder names
 INBOX_DIR = "Inbox"
 NEEDS_ACTION_DIR = "Needs_Action"
