@@ -42,6 +42,27 @@ class ReconcileResult:
         return self.next_step["requires_hitl"]
 
 
+def count_by_status(vault_root: Path) -> dict[str, int]:
+    """Count plan files grouped by their frontmatter status.
+
+    Args:
+        vault_root: Root directory of the vault.
+
+    Returns:
+        Dict mapping status strings to counts.
+    """
+    plans_dir = vault_root / PLANS_DIR
+    if not plans_dir.exists():
+        return {}
+    counts: dict[str, int] = {}
+    for plan_file in plans_dir.glob("PLAN-*.md"):
+        content = plan_file.read_text(encoding="utf-8")
+        meta = parse_frontmatter(content)
+        status = meta["status"] or "unknown"
+        counts[status] = counts.get(status, 0) + 1
+    return counts
+
+
 def find_incomplete_plans(vault_root: Path) -> list[Path]:
     """Find all plans that are not yet complete.
 
