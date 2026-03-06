@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from agents.utils import clamp, ensure_dir, file_exists, is_markdown, safe_read, slugify, truncate, utcnow_iso
+from agents.utils import clamp, ensure_dir, file_exists, is_markdown, safe_read, safe_write, slugify, truncate, utcnow_iso
 
 
 class TestSlugify:
@@ -103,6 +103,23 @@ class TestTruncate:
         result = truncate("a" * 100, 10)
         assert len(result) == 10
         assert result.endswith("...")
+
+
+class TestSafeWrite:
+    def test_writes_content(self, tmp_path: Path):
+        f = tmp_path / "test.txt"
+        assert safe_write(f, "hello") is True
+        assert f.read_text() == "hello"
+
+    def test_creates_parent_dirs(self, tmp_path: Path):
+        f = tmp_path / "nested" / "deep" / "file.txt"
+        assert safe_write(f, "content") is True
+        assert f.exists()
+
+    def test_roundtrip_with_safe_read(self, tmp_path: Path):
+        f = tmp_path / "roundtrip.md"
+        safe_write(f, "# Title\n\nBody text.")
+        assert safe_read(f) == "# Title\n\nBody text."
 
 
 class TestClamp:
