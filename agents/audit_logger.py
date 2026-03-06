@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -81,3 +82,30 @@ def read_log(vault_root: Path, date: str | None = None) -> str:
     if not log_file.exists():
         return ""
     return log_file.read_text(encoding="utf-8")
+
+
+_LOG_LINE_RE = re.compile(
+    r"- \[(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})\] \[(\w+)\] \*\*(\w+)\*\*: (.+)"
+)
+
+
+def parse_log_entries(content: str) -> list[AuditEntry]:
+    """Parse raw audit log content into structured AuditEntry objects.
+
+    Args:
+        content: Raw audit log markdown text.
+
+    Returns:
+        List of parsed ``AuditEntry`` objects.
+    """
+    entries: list[AuditEntry] = []
+    for match in _LOG_LINE_RE.finditer(content):
+        entries.append(
+            AuditEntry(
+                timestamp=match.group(1),
+                tier=match.group(2),
+                action=match.group(3),
+                detail=match.group(4),
+            )
+        )
+    return entries
