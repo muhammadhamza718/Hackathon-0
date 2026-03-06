@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import logging
 
-from agents.logging_config import configure_logging, get_logger
+import pytest
+
+from agents.logging_config import Level, configure_logging, get_logger
 
 
 def test_get_logger_returns_logger():
@@ -32,3 +34,27 @@ def test_configure_logging_info_level():
 def test_configure_logging_warning_level():
     configure_logging(level="WARNING")
     assert logging.root.level == logging.WARNING
+
+
+class TestLevelEnum:
+    """Verify Level IntEnum maps to stdlib logging values."""
+
+    @pytest.mark.parametrize(
+        "level,stdlib_value",
+        [
+            (Level.DEBUG, logging.DEBUG),
+            (Level.INFO, logging.INFO),
+            (Level.WARNING, logging.WARNING),
+            (Level.ERROR, logging.ERROR),
+            (Level.CRITICAL, logging.CRITICAL),
+        ],
+    )
+    def test_values_match_stdlib(self, level: Level, stdlib_value: int):
+        assert level.value == stdlib_value
+
+    def test_ordering(self):
+        assert Level.DEBUG < Level.INFO < Level.WARNING < Level.ERROR < Level.CRITICAL
+
+    def test_int_comparison(self):
+        assert Level.INFO == 20
+        assert Level.ERROR > 30
