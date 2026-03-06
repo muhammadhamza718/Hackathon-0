@@ -4,9 +4,21 @@ from __future__ import annotations
 
 import logging
 import sys
+from enum import IntEnum, unique
 from typing import Literal
 
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
+
+
+@unique
+class Level(IntEnum):
+    """Typed log level enum wrapping stdlib logging constants."""
+
+    DEBUG = logging.DEBUG
+    INFO = logging.INFO
+    WARNING = logging.WARNING
+    ERROR = logging.ERROR
+    CRITICAL = logging.CRITICAL
 
 _DEFAULT_FORMAT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 _DATE_FORMAT = "%Y-%m-%dT%H:%M:%S"
