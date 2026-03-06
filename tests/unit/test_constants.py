@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from agents.constants import (
     APPROVED_DIR,
     DASHBOARD_FILE,
@@ -27,6 +29,7 @@ from agents.constants import (
     STEP_PENDING_MARKER,
     TIER_BRONZE,
     TIER_SILVER,
+    Tier,
 )
 
 
@@ -70,3 +73,33 @@ def test_tier_names():
 
 def test_dashboard_file():
     assert DASHBOARD_FILE == "Dashboard.md"
+
+
+class TestTierEnum:
+    """Verify Tier enum values and capability properties."""
+
+    @pytest.mark.parametrize(
+        "tier,expected_hitl",
+        [
+            (Tier.BRONZE, False),
+            (Tier.SILVER, True),
+            (Tier.GOLD, True),
+        ],
+    )
+    def test_can_use_hitl(self, tier: Tier, expected_hitl: bool):
+        assert tier.can_use_hitl is expected_hitl
+
+    @pytest.mark.parametrize(
+        "tier,expected_external",
+        [
+            (Tier.BRONZE, False),
+            (Tier.SILVER, False),
+            (Tier.GOLD, True),
+        ],
+    )
+    def test_can_act_externally(self, tier: Tier, expected_external: bool):
+        assert tier.can_act_externally is expected_external
+
+    def test_values_match_string_constants(self):
+        assert Tier.BRONZE.value == TIER_BRONZE
+        assert Tier.SILVER.value == TIER_SILVER
