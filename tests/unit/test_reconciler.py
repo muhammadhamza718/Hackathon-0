@@ -9,6 +9,7 @@ import pytest
 from agents.reconciler import (
     ReconcileResult,
     ReconcileStrategy,
+    count_by_status,
     find_incomplete_plans,
     prioritize_plans,
     reconcile,
@@ -169,6 +170,26 @@ class TestReconcile:
             (plans / f"PLAN-2026-{i:03d}.md").write_text(content)
         result = reconcile(tmp_path)
         assert result.total_incomplete == expected_count
+
+
+class TestCountByStatus:
+    """Verify plan status aggregation."""
+
+    def test_counts_active_and_draft(self, vault: Path):
+        counts = count_by_status(vault)
+        assert counts.get("active") == 1
+        assert counts.get("draft") == 1
+
+    def test_counts_complete(self, vault: Path):
+        counts = count_by_status(vault)
+        assert counts.get("complete") == 1
+
+    def test_empty_vault(self, tmp_path: Path):
+        assert count_by_status(tmp_path) == {}
+
+    def test_total_matches_plan_count(self, vault: Path):
+        counts = count_by_status(vault)
+        assert sum(counts.values()) == 3
 
 
 class TestReconcileStrategy:
