@@ -16,6 +16,17 @@ __all__ = [
     "ConfigurationError",
     "ScanError",
     "TemplateError",
+    # Gold Tier
+    "OdooError",
+    "OdooAuthError",
+    "SocialMediaError",
+    "ContentValidationError",
+    "BriefingError",
+    "CircuitOpenError",
+    "QuarantineError",
+    "TransientAPIError",
+    "LogicAPIError",
+    "ApprovalNotFoundError",
 ]
 
 
@@ -74,3 +85,60 @@ class ScanError(AgentError):
 
 class TemplateError(AgentError):
     """Error while rendering a task template."""
+
+
+# ---------------------------------------------------------------------------
+# Gold Tier exceptions
+# ---------------------------------------------------------------------------
+
+
+class OdooError(AgentError):
+    """Error communicating with Odoo via JSON-RPC."""
+
+
+class OdooAuthError(OdooError):
+    """Odoo authentication failed."""
+
+
+class SocialMediaError(AgentError):
+    """Error during social media operations."""
+
+
+class ContentValidationError(SocialMediaError):
+    """Social post content exceeds platform limits."""
+
+
+class BriefingError(AgentError):
+    """Error generating a CEO briefing."""
+
+
+class CircuitOpenError(AgentError):
+    """Call rejected because the circuit breaker is open."""
+
+    def __init__(self, api_name: str) -> None:
+        super().__init__(f"Circuit breaker open for '{api_name}'")
+        self.api_name = api_name
+
+
+class QuarantineError(AgentError):
+    """Error during quarantine operation."""
+
+
+class TransientAPIError(AgentError):
+    """Transient API error (retryable): 429, 5xx, timeouts."""
+
+    def __init__(self, message: str, status_code: int | None = None) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+
+
+class LogicAPIError(AgentError):
+    """Logic API error (not retryable): 400, 401, 403, 422."""
+
+    def __init__(self, message: str, status_code: int | None = None) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+
+
+class ApprovalNotFoundError(HITLError):
+    """Expected file in /Approved/ but it was not found."""
