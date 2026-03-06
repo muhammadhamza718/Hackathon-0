@@ -3,10 +3,20 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum, unique
 from pathlib import Path
 
 from agents.constants import PLANS_DIR, STATUS_ACTIVE, STATUS_BLOCKED, STATUS_DRAFT
 from agents.plan_parser import PlanStep, next_pending_step, parse_frontmatter, parse_steps
+
+
+@unique
+class ReconcileStrategy(Enum):
+    """Strategy for selecting which plan to resume."""
+
+    PRIORITY_FIRST = "priority_first"
+    NEWEST_FIRST = "newest_first"
+    OLDEST_FIRST = "oldest_first"
 
 _STATUS_PRIORITY = {STATUS_ACTIVE: 0, STATUS_BLOCKED: 1, STATUS_DRAFT: 2}
 
@@ -76,11 +86,15 @@ def prioritize_plans(plans: list[Path]) -> list[Path]:
     return sorted(plans, key=_sort_key)
 
 
-def reconcile(vault_root: Path) -> ReconcileResult:
+def reconcile(
+    vault_root: Path,
+    strategy: ReconcileStrategy = ReconcileStrategy.PRIORITY_FIRST,
+) -> ReconcileResult:
     """Run startup reconciliation — find and prioritize incomplete plans.
 
     Args:
         vault_root: Root directory of the vault.
+        strategy: Plan selection strategy (default: priority_first).
 
     Returns:
         A ``ReconcileResult`` with the top-priority plan and its next step.
@@ -89,8 +103,13 @@ def reconcile(vault_root: Path) -> ReconcileResult:
     if not plans:
         return ReconcileResult(total_incomplete=0, next_plan=None, next_step=None)
 
-    prioritized = prioritize_plans(plans)
-    top = prioritized[0]
+    if strategy is ReconcileStrategy.NEWEST_FIRST:
+        ordered = sorted(plans, key=lambda p: p.name, reverse=True)
+    elif strategy is ReconcileStrategy.OLDEST_FIRST:
+        ordered = sorted(plans, key=lambda p: p.name)
+    else:
+        ordered = prioritize_plans(plans)
+    top = ordered[0]
     content = top.read_text(encoding="utf-8")
     steps = parse_steps(content)
     pending = next_pending_step(steps)
