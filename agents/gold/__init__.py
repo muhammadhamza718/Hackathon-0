@@ -18,6 +18,7 @@ from .config import (
     ResilienceConfig,
     SafetyConfig,
 )
+from .resilient_executor import ExecutionResult, ResilientExecutor
 from .safety_gate import ApprovalRequest, GoldSafetyGate
 from .exceptions import (
     AuditError,
@@ -56,6 +57,9 @@ __all__ = [
     "BriefingConfig",
     "ResilienceConfig",
     "SafetyConfig",
+    # Resilience
+    "ResilientExecutor",
+    "ExecutionResult",
     # Safety
     "GoldSafetyGate",
     "ApprovalRequest",

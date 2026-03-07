@@ -1,199 +1,276 @@
-"""Resilient executor — exponential backoff, quarantine, circuit breaker.
+"""Resilient executor with exponential backoff and circuit breaker.
 
-Implements the three-layer resilience architecture per Constitution XIV:
-  Layer 1: Exponential backoff for transient errors (429, 5xx, timeouts).
-  Layer 2: Quarantine-first for logic errors (400, 401, 403, 422).
-  Layer 3: Circuit breaker — open after 3 consecutive failures.
+Provides fault-tolerant execution for Gold Tier operations with automatic
+retry logic, exponential backoff, and circuit breaker pattern.
 """
 
 from __future__ import annotations
 
-import random
 import time
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from pathlib import Path
-from typing import Callable, TypeVar
+from typing import Any, Callable, TypeVar
 
-from agents.constants import (
-    BACKOFF_BASE_SECONDS,
-    BACKOFF_MAX_SECONDS,
-    CIRCUIT_BREAKER_THRESHOLD,
-    MAX_RETRIES,
-    NEEDS_ACTION_DIR,
-    QUARANTINE_PREFIX,
+from .config import ResilienceConfig
+from .exceptions import (
+    CircuitBreakerOpenError,
+    MaxRetriesExceededError,
+    ResilienceError,
 )
-from agents.exceptions import (
-    CircuitOpenError,
-    LogicAPIError,
-    QuarantineError,
-    TransientAPIError,
-)
-from agents.gold.models import CircuitBreakerState, ErrorType, QuarantinedItem
-from agents.utils import ensure_dir, utcnow_iso
 
 T = TypeVar("T")
 
 
-def classify_error(exc: Exception) -> ErrorType:
-    """Classify an exception as transient or logic.
+@dataclass
+class ExecutionResult:
+    """Result of a resilient execution."""
 
-    Transient: ``TransientAPIError``, ``ConnectionError``, ``TimeoutError``.
-    Logic: ``LogicAPIError``, ``ValueError``, ``TypeError``.
-    """
-    if isinstance(exc, TransientAPIError | ConnectionError | TimeoutError):
-        return ErrorType.TRANSIENT
-    if isinstance(exc, LogicAPIError | ValueError | TypeError):
-        return ErrorType.LOGIC
-    # Default: treat unknown as transient to allow retry
-    return ErrorType.TRANSIENT
+    success: bool
+    value: Any = None
+    error: str | None = None
+    retries_attempted: int = 0
+    duration_ms: int = 0
 
 
-def _backoff_delay(attempt: int) -> float:
-    """Calculate exponential backoff delay with jitter.
+@dataclass
+class CircuitBreaker:
+    """Circuit breaker for a specific API or operation."""
 
-    Sequence: 1s, 2s, 4s, 8s, 16s  (capped at 60s).
-    Jitter: uniform [0, delay/2].
-    """
-    delay = min(BACKOFF_BASE_SECONDS * (2 ** attempt), BACKOFF_MAX_SECONDS)
-    jitter = random.uniform(0, delay / 2)  # noqa: S311
-    return delay + jitter
+    name: str
+    failure_count: int = 0
+    last_failure_time: datetime | None = None
+    is_open: bool = False
+    opened_at: datetime | None = None
+    failure_threshold: int = 3
+    reset_timeout_seconds: float = 30.0
+
+    def record_failure(self) -> None:
+        """Record a failure and potentially open the circuit."""
+        self.failure_count += 1
+        self.last_failure_time = datetime.now(timezone.utc)
+
+        if self.failure_count >= self.failure_threshold:
+            self.is_open = True
+            self.opened_at = self.last_failure_time
+
+    def record_success(self) -> None:
+        """Record a success and reset the circuit breaker."""
+        self.failure_count = 0
+        self.is_open = False
+        self.opened_at = None
+
+    def can_execute(self) -> bool:
+        """Check if execution is allowed."""
+        if not self.is_open:
+            return True
+
+        # Check if reset timeout has elapsed
+        if self.opened_at is None:
+            return False
+
+        elapsed = (
+            datetime.now(timezone.utc) - self.opened_at
+        ).total_seconds()
+        if elapsed >= self.reset_timeout_seconds:
+            # Half-open: allow one test execution
+            return True
+
+        return False
+
+    def reset(self) -> None:
+        """Manually reset the circuit breaker."""
+        self.failure_count = 0
+        self.is_open = False
+        self.opened_at = None
+        self.last_failure_time = None
 
 
 class ResilientExecutor:
-    """Execute operations with backoff, quarantine, and circuit breaker."""
+    """Executes operations with resilience patterns.
 
-    def __init__(self, vault_root: Path) -> None:
-        self.vault_root = vault_root
-        self._breakers: dict[str, CircuitBreakerState] = {}
+    Features:
+    - Exponential backoff retry logic
+    - Circuit breaker pattern
+    - Configurable retry limits
+    - Execution result tracking
+    """
 
-    # ------------------------------------------------------------------
-    # Circuit breaker helpers
-    # ------------------------------------------------------------------
+    def __init__(self, config: ResilienceConfig | None = None):
+        """Initialize the resilient executor.
 
-    def get_circuit_state(self, api_name: str) -> CircuitBreakerState:
-        """Return (or create) the circuit breaker for *api_name*."""
-        if api_name not in self._breakers:
-            self._breakers[api_name] = CircuitBreakerState(api_name=api_name)
-        return self._breakers[api_name]
+        Args:
+            config: Resilience configuration.
+        """
+        self.config = config or ResilienceConfig.from_env()
+        self._circuit_breakers: dict[str, CircuitBreaker] = {}
 
-    # ------------------------------------------------------------------
-    # Core execute
-    # ------------------------------------------------------------------
+    def _get_circuit_breaker(self, name: str) -> CircuitBreaker:
+        """Get or create a circuit breaker for the given name."""
+        if name not in self._circuit_breakers:
+            self._circuit_breakers[name] = CircuitBreaker(
+                name=name,
+                failure_threshold=self.config.circuit_breaker_threshold,
+                reset_timeout_seconds=self.config.circuit_breaker_reset_seconds,
+            )
+        return self._circuit_breakers[name]
 
     def execute(
         self,
-        operation: Callable[..., T],
-        api_name: str,
-        *args: object,
-        max_retries: int = MAX_RETRIES,
-        **kwargs: object,
-    ) -> T:
-        """Run *operation* with full resilience stack.
+        func: Callable[..., T],
+        *args: Any,
+        operation_name: str = "operation",
+        **kwargs: Any,
+    ) -> ExecutionResult:
+        """Execute a function with resilience patterns.
 
-        1. Check circuit breaker → raise ``CircuitOpenError`` if open.
-        2. On success → reset breaker, return result.
-        3. On transient error → exponential backoff, retry up to *max_retries*.
-        4. On logic error → quarantine immediately, no retry.
-        5. After all retries exhausted → record failure, maybe open breaker.
+        Args:
+            func: The function to execute.
+            *args: Positional arguments for the function.
+            operation_name: Name of the operation (for circuit breaker).
+            **kwargs: Keyword arguments for the function.
 
         Returns:
-            The operation result on success.
-
-        Raises:
-            CircuitOpenError: If the circuit breaker for *api_name* is open.
-            LogicAPIError: If a non-retryable error occurs.
-            TransientAPIError: If all retries are exhausted.
+            ExecutionResult with success status and value or error.
         """
-        breaker = self.get_circuit_state(api_name)
+        circuit_breaker = self._get_circuit_breaker(operation_name)
+        start_time = datetime.now(timezone.utc)
 
-        if breaker.is_open:
-            raise CircuitOpenError(api_name)
+        # Check circuit breaker
+        if not circuit_breaker.can_execute():
+            return ExecutionResult(
+                success=False,
+                error=f"Circuit breaker open for {operation_name}",
+                retries_attempted=0,
+            )
 
-        last_exc: Exception | None = None
+        last_error: Exception | None = None
+        retries_attempted = 0
 
-        for attempt in range(max_retries):
+        for attempt in range(self.config.max_retries + 1):
             try:
-                result = operation(*args, **kwargs)
-                breaker.record_success()
-                return result  # type: ignore[return-value]
-            except Exception as exc:
-                error_type = classify_error(exc)
+                result = func(*args, **kwargs)
+                circuit_breaker.record_success()
 
-                if error_type is ErrorType.LOGIC:
-                    breaker.record_failure(
-                        str(exc), threshold=CIRCUIT_BREAKER_THRESHOLD
-                    )
-                    raise
-
-                # Transient — backoff and retry
-                last_exc = exc
-                breaker.record_failure(
-                    str(exc), threshold=CIRCUIT_BREAKER_THRESHOLD
+                duration_ms = int(
+                    (datetime.now(timezone.utc) - start_time).total_seconds()
+                    * 1000
                 )
 
-                if breaker.is_open:
-                    raise CircuitOpenError(api_name) from exc
+                return ExecutionResult(
+                    success=True,
+                    value=result,
+                    retries_attempted=retries_attempted,
+                    duration_ms=duration_ms,
+                )
 
-                if attempt < max_retries - 1:
-                    time.sleep(_backoff_delay(attempt))
+            except Exception as e:
+                last_error = e
+                retries_attempted = attempt
+                circuit_breaker.record_failure()
 
-        # All retries exhausted
-        raise TransientAPIError(
-            f"All {max_retries} retries exhausted for '{api_name}': {last_exc}"
-        ) from last_exc
+                # Check if we should retry
+                if attempt < self.config.max_retries:
+                    # Calculate delay with exponential backoff
+                    delay = min(
+                        self.config.exponential_base**attempt
+                        * self.config.base_delay_seconds,
+                        self.config.max_delay_seconds,
+                    )
+                    time.sleep(delay)
+                else:
+                    # Max retries exceeded
+                    break
 
-    # ------------------------------------------------------------------
-    # Quarantine
-    # ------------------------------------------------------------------
+        duration_ms = int(
+            (datetime.now(timezone.utc) - start_time).total_seconds() * 1000
+        )
 
-    def quarantine(
+        return ExecutionResult(
+            success=False,
+            error=str(last_error) if last_error else "Unknown error",
+            retries_attempted=retries_attempted,
+            duration_ms=duration_ms,
+        )
+
+    def execute_or_raise(
         self,
-        filename: str,
-        error: Exception,
-        payload: dict | None = None,
-    ) -> QuarantinedItem:
-        """Quarantine a failed operation and create a P0 alert.
+        func: Callable[..., T],
+        *args: Any,
+        operation_name: str = "operation",
+        **kwargs: Any,
+    ) -> T:
+        """Execute a function and raise on failure.
 
-        Renames the source file with the ``[QUARANTINED]_`` prefix and
-        writes a high-priority alert into ``/Needs_Action/``.
+        Args:
+            func: The function to execute.
+            *args: Positional arguments for the function.
+            operation_name: Name of the operation (for circuit breaker).
+            **kwargs: Keyword arguments for the function.
 
         Returns:
-            A ``QuarantinedItem`` describing the quarantined operation.
+            The function result.
+
+        Raises:
+            CircuitBreakerOpenError: If circuit breaker is open.
+            MaxRetriesExceededError: If max retries exceeded.
+            ResilienceError: For other execution errors.
         """
-        ts = utcnow_iso()
-        q_filename = f"{QUARANTINE_PREFIX}{filename}"
-        error_type = (
-            "logic_error"
-            if isinstance(error, LogicAPIError | ValueError | TypeError)
-            else "system_error"
-        )
-        status_code = getattr(error, "status_code", None)
-
-        item = QuarantinedItem(
-            original_filename=filename,
-            quarantined_filename=q_filename,
-            error_type=error_type,
-            http_status=status_code,
-            error_message=str(error),
-            original_payload=payload or {},
-            quarantined_at=ts,
-            alert_created=True,
+        result = self.execute(
+            func, *args, operation_name=operation_name, **kwargs
         )
 
-        # Write P0 alert
-        needs_action = ensure_dir(self.vault_root / NEEDS_ACTION_DIR)
-        alert_path = needs_action / q_filename
-        alert_content = (
-            "---\n"
-            "priority: P0\n"
-            "type: system-failure\n"
-            f"quarantined_at: {ts}\n"
-            f"original_file: {filename}\n"
-            "---\n\n"
-            "# System Failure Alert\n\n"
-            f"**Error Type**: {error_type} (HTTP {status_code or 'N/A'})\n"
-            f"**Message**: {error}\n"
-        )
-        alert_path.write_text(alert_content, encoding="utf-8")
+        if not result.success:
+            if "Circuit breaker open" in (result.error or ""):
+                raise CircuitBreakerOpenError(operation_name, result.error)
+            if result.retries_attempted >= self.config.max_retries:
+                raise MaxRetriesExceededError(
+                    f"Max retries ({self.config.max_retries}) exceeded for {operation_name}: {result.error}"
+                )
+            raise ResilienceError(result.error or "Execution failed")
 
-        return item
+        return result.value  # type: ignore
+
+    def get_circuit_breaker_status(
+        self, name: str
+    ) -> dict[str, Any] | None:
+        """Get the status of a circuit breaker.
+
+        Args:
+            name: The circuit breaker name.
+
+        Returns:
+            Dictionary with circuit breaker status, or None if not found.
+        """
+        if name not in self._circuit_breakers:
+            return None
+
+        cb = self._circuit_breakers[name]
+        return {
+            "name": cb.name,
+            "failure_count": cb.failure_count,
+            "is_open": cb.is_open,
+            "failure_threshold": cb.failure_threshold,
+            "reset_timeout_seconds": cb.reset_timeout_seconds,
+            "last_failure_time": (
+                cb.last_failure_time.isoformat()
+                if cb.last_failure_time
+                else None
+            ),
+            "opened_at": (
+                cb.opened_at.isoformat() if cb.opened_at else None
+            ),
+        }
+
+    def reset_circuit_breaker(self, name: str) -> None:
+        """Manually reset a circuit breaker.
+
+        Args:
+            name: The circuit breaker name.
+        """
+        if name in self._circuit_breakers:
+            self._circuit_breakers[name].reset()
+
+    def reset_all_circuit_breakers(self) -> None:
+        """Reset all circuit breakers."""
+        for cb in self._circuit_breakers.values():
+            cb.reset()
