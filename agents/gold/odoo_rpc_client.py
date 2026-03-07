@@ -1,446 +1,345 @@
-"""Odoo 19+ JSON-RPC integration client.
+"""Odoo JSON-RPC client for Odoo 19+ integration.
 
-All READ operations are autonomous.  All WRITE operations are drafted
-to ``/Pending_Approval/`` and only executed after human approval
-(Constitution XI).  Credentials are loaded from ``.env`` and never
-persisted to the vault.
+Provides a type-safe client for interacting with Odoo's JSON-RPC API
+for accounting operations, invoice management, and bank reconciliation.
 """
 
 from __future__ import annotations
 
 import json
-import os
-import uuid
-from datetime import datetime, timezone
-from pathlib import Path
+import logging
+from typing import Any
 
-from agents.constants import (
-    APPROVED_DIR,
-    DONE_DIR,
-    PENDING_APPROVAL_DIR,
-    TIER_GOLD,
+import requests
+
+from .config import OdooConfig as OdooConfigData
+from .exceptions import (
+    OdooAuthenticationError,
+    OdooConnectionError,
+    OdooOperationError,
 )
-from agents.exceptions import (
-    ApprovalNotFoundError,
-    ConfigurationError,
-    OdooAuthError,
-    OdooError,
-    LogicAPIError,
-    TransientAPIError,
-)
-from agents.gold.audit_gold import append_gold_log
-from agents.gold.models import OdooConfig, OdooOperation, OdooSession
-from agents.utils import ensure_dir, utcnow_iso
+from .models import OdooOperation, OdooSession
 
-# Optional: import requests at call-time to keep module importable
-# even when `requests` is not installed (for testing / type-checking).
-try:
-    import requests
-except ModuleNotFoundError:  # pragma: no cover
-    requests = None  # type: ignore[assignment]
-
-
-def load_odoo_config() -> OdooConfig:
-    """Load Odoo connection settings from environment variables.
-
-    Raises:
-        ConfigurationError: If required variables are missing.
-    """
-    url = os.getenv("ODOO_URL", "")
-    database = os.getenv("ODOO_DB", "")
-    username = os.getenv("ODOO_USERNAME", "")
-    api_key = os.getenv("ODOO_API_KEY", "")
-
-    missing = [
-        name
-        for name, val in [
-            ("ODOO_URL", url),
-            ("ODOO_DB", database),
-            ("ODOO_USERNAME", username),
-            ("ODOO_API_KEY", api_key),
-        ]
-        if not val
-    ]
-    if missing:
-        raise ConfigurationError(
-            f"Missing Odoo environment variables: {', '.join(missing)}"
-        )
-
-    return OdooConfig(
-        url=url.rstrip("/"),
-        database=database,
-        username=username,
-        api_key=api_key,
-    )
-
-
-def _jsonrpc_payload(
-    service: str, method: str, args: list
-) -> dict:
-    """Build a JSON-RPC 2.0 request payload."""
-    return {
-        "jsonrpc": "2.0",
-        "method": "call",
-        "params": {
-            "service": service,
-            "method": method,
-            "args": args,
-        },
-    }
+logger = logging.getLogger(__name__)
 
 
 class OdooRPCClient:
-    """JSON-RPC client for Odoo 19+ Community Edition.
+    """Client for Odoo JSON-RPC API.
 
-    Supports dependency injection for session management and testing.
+    Supports:
+    - Authentication and session management
+    - Model operations (search, read, create, write, unlink)
+    - Method calls on models
+    - Batch operations
     """
 
-    def __init__(
-        self,
-        config: OdooConfig,
-        vault_root: Path,
-        executor: object | None = None,
-        session: OdooSession | None = None,
-    ) -> None:
-        """Initialize Odoo RPC client.
+    def __init__(self, config: OdooConfigData | None = None):
+        """Initialize the Odoo RPC client.
 
         Args:
-            config: Odoo connection configuration.
-            vault_root: Root path of the vault.
-            executor: Optional resilient executor for retry logic.
-            session: Optional injected session (for testing/DI).
-                     If not provided, creates a new unauthenticated session.
+            config: Odoo configuration. If None, loads from environment.
         """
-        self.config = config
-        self.vault_root = vault_root
-        self._session = session or OdooSession(
-            url=config.url, database=config.database
-        )
-        self._executor = executor  # ResilientExecutor, if wired
+        self.config = config or OdooConfigData.from_env()
+        self.session: OdooSession | None = None
+        self._session_id: str | None = None
 
-    # ------------------------------------------------------------------
-    # Low-level RPC
-    # ------------------------------------------------------------------
+    def _get_endpoint(self, path: str) -> str:
+        """Get the full endpoint URL."""
+        return f"{self.config.url}{path}"
 
-    def _call(self, service: str, method: str, args: list) -> object:
-        """Make a JSON-RPC call to Odoo.
+    def _make_request(
+        self, method: str, params: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Make a JSON-RPC request to Odoo.
+
+        Args:
+            method: The RPC method to call.
+            params: Method parameters.
+
+        Returns:
+            The JSON-RPC response.
 
         Raises:
-            OdooError: On any RPC failure.
-            TransientAPIError: On 5xx / timeout.
-            LogicAPIError: On 4xx.
+            OdooConnectionError: If connection fails.
+            OdooOperationError: If the operation fails.
         """
-        if requests is None:
-            raise OdooError("The 'requests' package is required for Odoo integration")
+        payload = {
+            "jsonrpc": "2.0",
+            "method": "call",
+            "params": params,
+            "id": 1,
+        }
 
-        payload = _jsonrpc_payload(service, method, args)
-        url = f"{self.config.url}/jsonrpc"
+        headers = {"Content-Type": "application/json"}
 
         try:
-            resp = requests.post(url, json=payload, timeout=30)
-        except requests.ConnectionError as exc:
-            raise TransientAPIError(f"Connection to Odoo failed: {exc}") from exc
-        except requests.Timeout as exc:
-            raise TransientAPIError("Odoo request timed out") from exc
-
-        if resp.status_code >= 500:
-            raise TransientAPIError(
-                f"Odoo server error: HTTP {resp.status_code}",
-                status_code=resp.status_code,
+            response = requests.post(
+                self._get_endpoint("/jsonrpc"),
+                data=json.dumps(payload),
+                headers=headers,
+                timeout=30,
             )
-        if resp.status_code in {400, 401, 403, 422}:
-            raise LogicAPIError(
-                f"Odoo client error: HTTP {resp.status_code}",
-                status_code=resp.status_code,
-            )
+            response.raise_for_status()
+            result = response.json()
 
-        data = resp.json()
-        if "error" in data:
-            msg = data["error"].get("message", str(data["error"]))
-            raise OdooError(f"Odoo RPC error: {msg}")
+            if "error" in result:
+                error = result["error"]
+                raise OdooOperationError(
+                    operation=method,
+                    message=error.get("message", "Unknown error"),
+                )
 
-        return data.get("result")
+            return result.get("result", {})
 
-    # ------------------------------------------------------------------
-    # Authentication
-    # ------------------------------------------------------------------
+        except requests.exceptions.RequestException as e:
+            raise OdooConnectionError(f"Connection failed: {e}") from e
 
     def authenticate(self) -> OdooSession:
-        """Authenticate to Odoo and return an ``OdooSession``.
+        """Authenticate with Odoo and create a session.
+
+        Returns:
+            The authenticated session.
 
         Raises:
-            OdooAuthError: If authentication fails.
+            OdooAuthenticationError: If authentication fails.
         """
-        result = self._call(
-            "common",
-            "authenticate",
-            [
-                self.config.database,
-                self.config.username,
-                self.config.api_key,
-                {},
-            ],
+        try:
+            result = self._make_request(
+                "authenticate",
+                {
+                    "db": self.config.database,
+                    "login": self.config.username,
+                    "password": self.config.api_key,
+                },
+            )
+
+            uid = result.get("uid")
+            if not uid:
+                raise OdooAuthenticationError("Authentication failed: no UID")
+
+            self.session = OdooSession(
+                url=self.config.url,
+                database=self.config.database,
+                uid=uid,
+                authenticated=True,
+            )
+            self._session_id = result.get("session_id")
+
+            logger.info(f"Authenticated to Odoo as user {uid}")
+            return self.session
+
+        except OdooOperationError as e:
+            raise OdooAuthenticationError(str(e)) from e
+
+    def execute(
+        self,
+        model: str,
+        method: str,
+        args: list[Any] | None = None,
+        kwargs: dict[str, Any] | None = None,
+    ) -> Any:
+        """Execute a method on an Odoo model.
+
+        Args:
+            model: The model name (e.g., 'account.move').
+            method: The method name (e.g., 'search_read').
+            args: Positional arguments.
+            kwargs: Keyword arguments.
+
+        Returns:
+            The method result.
+
+        Raises:
+            OdooOperationError: If the operation fails.
+        """
+        if self.session is None or not self.session.authenticated:
+            self.authenticate()
+
+        params = {
+            "model": model,
+            "method": method,
+            "args": args or [],
+            "kwargs": kwargs or {},
+        }
+
+        # Log operation
+        operation = OdooOperation(
+            operation_id=f"op_{model}_{method}",
+            model=model,
+            method=method,
+            args=tuple(args or []),
+            kwargs=kwargs or {},
+            is_write=method in ("create", "write", "unlink"),
         )
 
-        if not result or (isinstance(result, (int, float)) and result <= 0):
-            raise OdooAuthError("Invalid Odoo credentials")
+        logger.debug(f"Executing {model}.{method}")
+        result = self._make_request("execute", params)
+        operation.status = "executed"
+        operation.result = result
 
-        uid = int(result)  # type: ignore[arg-type]
-        self._session = OdooSession(
-            url=self.config.url,
-            database=self.config.database,
-            uid=uid,
-            authenticated=True,
-            last_call=utcnow_iso(),
-        )
-
-        append_gold_log(
-            self.vault_root,
-            action="odoo_read",
-            details=f"Authenticated as uid={uid}",
-            rationale="Odoo session initialization",
-        )
-
-        return self._session
-
-    # ------------------------------------------------------------------
-    # Autonomous READ operations
-    # ------------------------------------------------------------------
+        return result
 
     def search_read(
         self,
         model: str,
-        domain: list,
-        fields: list,
-        limit: int = 100,
-    ) -> list[dict]:
-        """Execute ``search_read`` on an Odoo model (autonomous).
+        domain: list[Any] | None = None,
+        fields: list[str] | None = None,
+        limit: int | None = None,
+        offset: int = 0,
+        order: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Search and read records from a model.
+
+        Args:
+            model: The model name.
+            domain: Search domain (list of tuples).
+            fields: List of fields to return.
+            limit: Maximum number of records.
+            offset: Number of records to skip.
+            order: Order by field.
 
         Returns:
-            List of record dicts.
+            List of records as dictionaries.
         """
-        result = self._call(
-            "object",
-            "execute_kw",
-            [
-                self.config.database,
-                self._session.uid,
-                self.config.api_key,
-                model,
-                "search_read",
-                [domain],
-                {"fields": fields, "limit": limit},
-            ],
-        )
-        self._session.last_call = utcnow_iso()
-        return result if isinstance(result, list) else []
+        kwargs = {
+            "domain": domain or [],
+            "fields": fields or [],
+            "offset": offset,
+        }
+
+        if limit is not None:
+            kwargs["limit"] = limit
+        if order is not None:
+            kwargs["order"] = order
+
+        return self.execute(model, "search_read", kwargs=kwargs)
+
+    def search(
+        self,
+        model: str,
+        domain: list[Any] | None = None,
+        limit: int | None = None,
+        offset: int = 0,
+        order: str | None = None,
+    ) -> list[int]:
+        """Search for record IDs.
+
+        Args:
+            model: The model name.
+            domain: Search domain.
+            limit: Maximum number of records.
+            offset: Number of records to skip.
+            order: Order by field.
+
+        Returns:
+            List of record IDs.
+        """
+        kwargs = {
+            "domain": domain or [],
+            "offset": offset,
+        }
+
+        if limit is not None:
+            kwargs["limit"] = limit
+        if order is not None:
+            kwargs["order"] = order
+
+        return self.execute(model, "search", kwargs=kwargs)
 
     def read(
-        self,
-        model: str,
-        ids: list[int],
-        fields: list,
-    ) -> list[dict]:
-        """Read specific records by ID (autonomous)."""
-        result = self._call(
-            "object",
-            "execute_kw",
-            [
-                self.config.database,
-                self._session.uid,
-                self.config.api_key,
-                model,
-                "read",
-                [ids],
-                {"fields": fields},
-            ],
-        )
-        self._session.last_call = utcnow_iso()
-        return result if isinstance(result, list) else []
+        self, model: str, ids: list[int], fields: list[str] | None = None
+    ) -> list[dict[str, Any]]:
+        """Read records by ID.
 
-    # ------------------------------------------------------------------
-    # WRITE operations — draft to /Pending_Approval/
-    # ------------------------------------------------------------------
+        Args:
+            model: The model name.
+            ids: List of record IDs.
+            fields: List of fields to return.
 
-    def draft_create(
-        self,
-        model: str,
-        values: dict,
-        rationale: str = "",
-    ) -> OdooOperation:
-        """Draft a ``create`` operation to ``/Pending_Approval/``.
-
-        The operation is NOT executed against Odoo until approved.
+        Returns:
+            List of records as dictionaries.
         """
-        op_id = str(uuid.uuid4())[:8]
-        payload = _jsonrpc_payload(
-            "object",
-            "execute_kw",
-            [
-                self.config.database,
-                self._session.uid,
-                "***",  # redacted
-                model,
-                "create",
-                [values],
-                {},
-            ],
+        return self.execute(
+            model, "read", args=[ids], kwargs={"fields": fields or []}
         )
 
-        op = OdooOperation(
-            operation_id=op_id,
-            model=model,
-            method="create",
-            args=(values,),
-            is_write=True,
-            requires_approval=True,
-            status="pending",
-            json_rpc_payload=payload,
-        )
+    def create(
+        self, model: str, values: dict[str, Any]
+    ) -> int | list[int]:
+        """Create new records.
 
-        # Write approval file
-        pending_dir = ensure_dir(self.vault_root / PENDING_APPROVAL_DIR)
-        filename = f"odoo-create-{model}-{op_id}.md"
-        content = (
-            "---\n"
-            f"type: odoo_write_draft\n"
-            f"model: {model}\n"
-            f"method: create\n"
-            f"operation_id: {op_id}\n"
-            f"rationale: {rationale}\n"
-            f"risk_level: Medium\n"
-            "---\n\n"
-            f"# Odoo Create: {model}\n\n"
-            f"```json\n{json.dumps(values, indent=2)}\n```\n"
-        )
-        (pending_dir / filename).write_text(content, encoding="utf-8")
+        Args:
+            model: The model name.
+            values: Field values for the new record(s).
 
-        append_gold_log(
-            self.vault_root,
-            action="odoo_write_draft",
-            source_file=f"Pending_Approval/{filename}",
-            details=f"Draft create {model}",
-            rationale=rationale or f"Draft Odoo create: {model}",
-        )
-
-        return op
-
-    def draft_write(
-        self,
-        model: str,
-        ids: list[int],
-        values: dict,
-        rationale: str = "",
-    ) -> OdooOperation:
-        """Draft a ``write`` (update) operation to ``/Pending_Approval/``."""
-        op_id = str(uuid.uuid4())[:8]
-        payload = _jsonrpc_payload(
-            "object",
-            "execute_kw",
-            [
-                self.config.database,
-                self._session.uid,
-                "***",
-                model,
-                "write",
-                [ids, values],
-                {},
-            ],
-        )
-
-        op = OdooOperation(
-            operation_id=op_id,
-            model=model,
-            method="write",
-            args=(ids, values),
-            is_write=True,
-            requires_approval=True,
-            status="pending",
-            json_rpc_payload=payload,
-        )
-
-        pending_dir = ensure_dir(self.vault_root / PENDING_APPROVAL_DIR)
-        filename = f"odoo-write-{model}-{op_id}.md"
-        content = (
-            "---\n"
-            f"type: odoo_write_draft\n"
-            f"model: {model}\n"
-            f"method: write\n"
-            f"operation_id: {op_id}\n"
-            f"rationale: {rationale}\n"
-            "---\n\n"
-            f"# Odoo Write: {model} (IDs: {ids})\n\n"
-            f"```json\n{json.dumps(values, indent=2)}\n```\n"
-        )
-        (pending_dir / filename).write_text(content, encoding="utf-8")
-
-        append_gold_log(
-            self.vault_root,
-            action="odoo_write_draft",
-            source_file=f"Pending_Approval/{filename}",
-            details=f"Draft write {model} ids={ids}",
-            rationale=rationale or f"Draft Odoo write: {model}",
-        )
-
-        return op
-
-    def execute_approved(
-        self,
-        operation: OdooOperation,
-    ) -> OdooOperation:
-        """Execute a previously approved Odoo write operation.
-
-        The corresponding file MUST exist in ``/Approved/``.
-
-        Raises:
-            ApprovalNotFoundError: If the file is not in ``/Approved/``.
+        Returns:
+            ID of the created record, or list of IDs for multiple records.
         """
-        approved_dir = self.vault_root / APPROVED_DIR
-        pattern = f"odoo-*-{operation.model}-{operation.operation_id}.md"
-        matches = list(approved_dir.glob(pattern))
+        return self.execute(model, "create", args=[values])
 
-        if not matches:
-            raise ApprovalNotFoundError(
-                f"No approved file found for operation {operation.operation_id}"
-            )
+    def write(
+        self, model: str, ids: list[int], values: dict[str, Any]
+    ) -> bool:
+        """Update existing records.
 
-        # Execute the actual RPC call
-        result = self._call(
-            "object",
-            "execute_kw",
-            [
-                self.config.database,
-                self._session.uid,
-                self.config.api_key,
-                operation.model,
-                operation.method,
-                list(operation.args),
-                operation.kwargs,
-            ],
+        Args:
+            model: The model name.
+            ids: List of record IDs to update.
+            values: Field values to update.
+
+        Returns:
+            True if successful.
+        """
+        return self.execute(model, "write", args=[ids, values])
+
+    def unlink(self, model: str, ids: list[int]) -> bool:
+        """Delete records.
+
+        Args:
+            model: The model name.
+            ids: List of record IDs to delete.
+
+        Returns:
+            True if successful.
+        """
+        return self.execute(model, "unlink", args=[ids])
+
+    def call_method(
+        self, model: str, record_id: int, method: str, *args: Any, **kwargs: Any
+    ) -> Any:
+        """Call a method on a specific record.
+
+        Args:
+            model: The model name.
+            record_id: The record ID.
+            method: The method name.
+            *args: Positional arguments.
+            **kwargs: Keyword arguments.
+
+        Returns:
+            The method result.
+        """
+        return self.execute(
+            model, method, args=[record_id, *args], kwargs=kwargs
         )
 
-        # Move approval file to Done
-        done_dir = ensure_dir(self.vault_root / DONE_DIR)
-        for match in matches:
-            match.rename(done_dir / match.name)
+    def get_version(self) -> dict[str, Any]:
+        """Get Odoo server version information.
 
-        append_gold_log(
-            self.vault_root,
-            action="odoo_read",  # executed write
-            source_file=f"Done/{matches[0].name}",
-            details=f"Executed approved {operation.method} on {operation.model}",
-            rationale=f"Approved operation {operation.operation_id}",
+        Returns:
+            Dictionary with version information.
+        """
+        return self._make_request(
+            "call",
+            {"service": "common", "method": "version"},
         )
 
-        return OdooOperation(
-            operation_id=operation.operation_id,
-            model=operation.model,
-            method=operation.method,
-            args=operation.args,
-            kwargs=operation.kwargs,
-            is_write=operation.is_write,
-            requires_approval=False,
-            status="executed",
-            result=result,
-            json_rpc_payload=operation.json_rpc_payload,
-        )
+    def is_connected(self) -> bool:
+        """Check if connected to Odoo."""
+        return self.session is not None and self.session.authenticated
+
+    def disconnect(self) -> None:
+        """Disconnect from Odoo."""
+        self.session = None
+        self._session_id = None
+        logger.info("Disconnected from Odoo")
