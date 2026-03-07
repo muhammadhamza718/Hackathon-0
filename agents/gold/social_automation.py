@@ -1,580 +1,495 @@
-"""Browser MCP automation for social media posting.
+"""Browser MCP automation for social media publishing.
 
-Provides browser automation scripts for posting to X (Twitter), Facebook,
-and Instagram via Browser MCP. Handles login sessions securely and
-supports scheduled posting.
-
-Note: This module requires Browser MCP to be configured with appropriate
-credentials stored securely (e.g., environment variables or secret manager).
+Provides browser automation capabilities for social media platforms
+that don't have public APIs, using Playwright for reliable automation.
 """
 
 from __future__ import annotations
 
 import asyncio
+import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from enum import Enum, unique
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any
 
-from agents.exceptions import SocialMediaError
-
-
-@unique
-class BrowserAction(Enum):
-    """Browser automation actions."""
-
-    NAVIGATE = "navigate"
-    CLICK = "click"
-    TYPE = "type"
-    UPLOAD = "upload"
-    SCREENSHOT = "screenshot"
-    WAIT = "wait"
-    EVALUATE = "evaluate"
+logger = logging.getLogger(__name__)
 
 
 @dataclass
-class BrowserStep:
-    """A single browser automation step."""
+class BrowserConfig:
+    """Browser configuration for automation."""
 
-    action: BrowserAction
-    selector: str = ""
-    value: str = ""
-    timeout: int = 5000
-    description: str = ""
+    headless: bool = True
+    timeout_ms: int = 30000
+    viewport_width: int = 1920
+    viewport_height: int = 1080
+    user_agent: str | None = None
+    proxy: str | None = None
 
 
 @dataclass
-class PostResult:
-    """Result of a social media post operation."""
+class PublishTask:
+    """A social media publishing task."""
 
-    success: bool
     platform: str
-    post_url: str | None = None
+    content: str
+    media_paths: list[str] | None = None
+    scheduled_time: str | None = None
+    status: str = "pending"
+    result_url: str | None = None
     error: str | None = None
-    timestamp: str = ""
-    screenshot_path: str | None = None
-
-
-class BrowserMCPProtocol(Protocol):
-    """Protocol for Browser MCP client."""
-
-    async def navigate(self, url: str) -> dict: ...
-    async def click(self, selector: str) -> dict: ...
-    async def type(self, selector: str, text: str) -> dict: ...
-    async def upload(self, selector: str, file_path: str) -> dict: ...
-    async def screenshot(self, path: str) -> dict: ...
-    async def wait(self, milliseconds: int) -> dict: ...
-    async def evaluate(self, script: str) -> dict: ...
 
 
 class SocialMediaAutomation:
-    """Browser-based social media posting automation.
+    """Browser automation for social media publishing.
 
-    Provides platform-specific automation for posting to X, Facebook,
-    and Instagram. Uses Browser MCP for browser control.
+    Supports:
+    - X (Twitter) posting
+    - Facebook posting
+    - LinkedIn posting
+    - Instagram posting (via web)
 
-    Security Notes:
-        - Credentials MUST be stored in environment variables
-        - Session cookies should be encrypted at rest
-        - Never log sensitive information
-        - Implement rate limiting to avoid account flags
+    Note: This is a framework - actual implementation requires
+    proper authentication and may violate platform ToS.
+    Use official APIs when available.
     """
 
-    def __init__(
-        self,
-        browser_client: BrowserMCPProtocol | None = None,
-        vault_root: Path | None = None,
-    ) -> None:
-        """Initialize SocialMediaAutomation.
+    def __init__(self, config: BrowserConfig | None = None):
+        """Initialize the automation engine.
 
         Args:
-            browser_client: Browser MCP client instance.
-            vault_root: Vault root for storing session data.
+            config: Browser configuration.
         """
-        self._browser = browser_client
-        self._vault_root = vault_root
-        self._sessions: dict[str, dict] = {}
+        self.config = config or BrowserConfig()
+        self._browser = None
+        self._context = None
+        self._page = None
 
-    def set_browser_client(self, client: BrowserMCPProtocol) -> None:
-        """Set the Browser MCP client.
-
-        Args:
-            client: Browser MCP client instance.
-        """
-        self._browser = client
-
-    async def _execute_steps(
-        self,
-        steps: list[BrowserStep],
-    ) -> list[dict]:
-        """Execute a sequence of browser steps.
-
-        Args:
-            steps: List of browser steps to execute.
-
-        Returns:
-            List of results from each step.
-
-        Raises:
-            SocialMediaError: If browser client is not set or step fails.
-        """
-        if self._browser is None:
-            raise SocialMediaError("Browser client not set")
-
-        results: list[dict] = []
-        for step in steps:
-            try:
-                if step.action == BrowserAction.NAVIGATE:
-                    result = await self._browser.navigate(step.value)
-                elif step.action == BrowserAction.CLICK:
-                    result = await self._browser.click(step.selector)
-                elif step.action == BrowserAction.TYPE:
-                    result = await self._browser.type(step.selector, step.value)
-                elif step.action == BrowserAction.UPLOAD:
-                    result = await self._browser.upload(step.selector, step.value)
-                elif step.action == BrowserAction.SCREENSHOT:
-                    result = await self._browser.screenshot(step.value)
-                elif step.action == BrowserAction.WAIT:
-                    result = await self._browser.wait(step.timeout)
-                elif step.action == BrowserAction.EVALUATE:
-                    result = await self._browser.evaluate(step.value)
-                else:
-                    raise SocialMediaError(f"Unknown action: {step.action}")
-
-                results.append(result)
-
-                # Small delay between steps
-                if step.timeout > 0:
-                    await asyncio.sleep(step.timeout / 1000)
-
-            except Exception as e:
-                raise SocialMediaError(
-                    f"Step failed: {step.description or step.action.value} - {e}"
-                ) from e
-
-        return results
-
-    def _get_x_post_steps(
-        self,
-        content: str,
-        media_paths: tuple[str, ...] = (),
-    ) -> list[BrowserStep]:
-        """Get browser steps for posting to X (Twitter).
-
-        Args:
-            content: Post content.
-            media_paths: Paths to media files.
-
-        Returns:
-            List of browser steps.
-        """
-        steps = [
-            BrowserStep(
-                BrowserAction.NAVIGATE,
-                value="https://twitter.com/home",
-                description="Navigate to X home",
-            ),
-            BrowserStep(
-                BrowserAction.WAIT,
-                timeout=2000,
-                description="Wait for page load",
-            ),
-            BrowserStep(
-                BrowserAction.CLICK,
-                selector="[data-testid='tweetTextarea_0']",
-                description="Click compose box",
-            ),
-            BrowserStep(
-                BrowserAction.TYPE,
-                selector="[data-testid='tweetTextarea_0']",
-                value=content,
-                description="Type post content",
-            ),
-        ]
-
-        # Add media upload steps
-        for i, media_path in enumerate(media_paths[:4]):  # X allows max 4
-            steps.extend([
-                BrowserStep(
-                    BrowserAction.CLICK,
-                    selector="[data-testid='addImageButton']",
-                    description=f"Click add image button {i+1}",
-                ),
-                BrowserStep(
-                    BrowserAction.UPLOAD,
-                    selector="input[type='file']",
-                    value=media_path,
-                    description=f"Upload image {i+1}",
-                ),
-                BrowserStep(
-                    BrowserAction.WAIT,
-                    timeout=1500,
-                    description="Wait for upload",
-                ),
-            ])
-
-        steps.extend([
-            BrowserStep(
-                BrowserAction.CLICK,
-                selector="[data-testid='tweetButton']",
-                description="Click tweet button",
-            ),
-            BrowserStep(
-                BrowserAction.WAIT,
-                timeout=3000,
-                description="Wait for post to publish",
-            ),
-            BrowserStep(
-                BrowserAction.SCREENSHOT,
-                value="x_post_confirmation.png",
-                description="Capture confirmation",
-            ),
-        ])
-
-        return steps
-
-    def _get_facebook_post_steps(
-        self,
-        content: str,
-        media_paths: tuple[str, ...] = (),
-    ) -> list[BrowserStep]:
-        """Get browser steps for posting to Facebook.
-
-        Args:
-            content: Post content.
-            media_paths: Paths to media files.
-
-        Returns:
-            List of browser steps.
-        """
-        steps = [
-            BrowserStep(
-                BrowserAction.NAVIGATE,
-                value="https://www.facebook.com",
-                description="Navigate to Facebook",
-            ),
-            BrowserStep(
-                BrowserAction.WAIT,
-                timeout=2000,
-                description="Wait for page load",
-            ),
-            BrowserStep(
-                BrowserAction.CLICK,
-                selector="[placeholder=\"What's on your mind?\"]",
-                description="Click create post",
-            ),
-            BrowserStep(
-                BrowserAction.TYPE,
-                selector="[placeholder=\"What's on your mind?\"]",
-                value=content,
-                description="Type post content",
-            ),
-        ]
-
-        # Add media upload
-        if media_paths:
-            steps.append(
-                BrowserStep(
-                    BrowserAction.CLICK,
-                    selector="[aria-label='Photo/video']",
-                    description="Click add photo/video",
-                ),
-            )
-            for media_path in media_paths[:10]:  # FB allows max 10
-                steps.extend([
-                    BrowserStep(
-                        BrowserAction.UPLOAD,
-                        selector="input[type='file']",
-                        value=media_path,
-                        description=f"Upload image",
-                    ),
-                    BrowserStep(
-                        BrowserAction.WAIT,
-                        timeout=2000,
-                        description="Wait for upload",
-                    ),
-                ])
-
-        steps.extend([
-            BrowserStep(
-                BrowserAction.CLICK,
-                selector="[type='submit']",
-                description="Click post button",
-            ),
-            BrowserStep(
-                BrowserAction.WAIT,
-                timeout=3000,
-                description="Wait for post to publish",
-            ),
-        ])
-
-        return steps
-
-    def _get_instagram_post_steps(
-        self,
-        content: str,
-        media_paths: tuple[str, ...] = (),
-    ) -> list[BrowserStep]:
-        """Get browser steps for posting to Instagram.
-
-        Args:
-            content: Post content (caption).
-            media_paths: Paths to media files.
-
-        Returns:
-            List of browser steps.
-        """
-        steps = [
-            BrowserStep(
-                BrowserAction.NAVIGATE,
-                value="https://www.instagram.com",
-                description="Navigate to Instagram",
-            ),
-            BrowserStep(
-                BrowserAction.WAIT,
-                timeout=2000,
-                description="Wait for page load",
-            ),
-            BrowserStep(
-                BrowserAction.CLICK,
-                selector="[aria-label='New post']",
-                description="Click new post",
-            ),
-            BrowserStep(
-                BrowserAction.WAIT,
-                timeout=1000,
-                description="Wait for dialog",
-            ),
-        ]
-
-        # Add media upload
-        for media_path in media_paths[:10]:  # IG allows max 10
-            steps.extend([
-                BrowserStep(
-                    BrowserAction.UPLOAD,
-                    selector="input[type='file']",
-                    value=media_path,
-                    description="Upload image",
-                ),
-                BrowserStep(
-                    BrowserAction.WAIT,
-                    timeout=2000,
-                    description="Wait for upload",
-                ),
-            ])
-
-        steps.extend([
-            BrowserStep(
-                BrowserAction.CLICK,
-                selector="button[type='button']",
-                description="Click next",
-            ),
-            BrowserStep(
-                BrowserAction.WAIT,
-                timeout=1000,
-                description="Wait for edit screen",
-            ),
-            BrowserStep(
-                BrowserAction.CLICK,
-                selector="button[type='button']",
-                description="Click next again",
-            ),
-            BrowserStep(
-                BrowserAction.WAIT,
-                timeout=1000,
-                description="Wait for caption screen",
-            ),
-            BrowserStep(
-                BrowserAction.TYPE,
-                selector="[aria-label='Write a caption...']",
-                value=content,
-                description="Type caption",
-            ),
-            BrowserStep(
-                BrowserAction.CLICK,
-                selector="button[type='button']",
-                description="Click share",
-            ),
-            BrowserStep(
-                BrowserAction.WAIT,
-                timeout=3000,
-                description="Wait for post to publish",
-            ),
-        ])
-
-        return steps
-
-    async def post_to_x(
-        self,
-        content: str,
-        media_paths: tuple[str, ...] = (),
-        screenshot_dir: Path | None = None,
-    ) -> PostResult:
-        """Post content to X (Twitter).
-
-        Args:
-            content: Post content (max 280 chars).
-            media_paths: Paths to media files.
-            screenshot_dir: Directory for screenshots.
-
-        Returns:
-            PostResult with success status and details.
-        """
+    async def start(self) -> None:
+        """Start the browser."""
         try:
-            steps = self._get_x_post_steps(content, media_paths)
+            from playwright.async_api import async_playwright
 
-            if screenshot_dir:
-                screenshot_dir.mkdir(parents=True, exist_ok=True)
-                # Update screenshot path
-                for step in steps:
-                    if step.action == BrowserAction.SCREENSHOT:
-                        step.value = str(screenshot_dir / f"x_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
-
-            results = await self._execute_steps(steps)
-
-            return PostResult(
-                success=True,
-                platform="X",
-                timestamp=datetime.now(timezone.utc).isoformat(),
-                screenshot_path=results[-1].get("path") if results else None,
+            playwright = await async_playwright().start()
+            self._browser = await playwright.chromium.launch(
+                headless=self.config.headless
             )
-
-        except SocialMediaError as e:
-            return PostResult(
-                success=False,
-                platform="X",
-                error=str(e),
-                timestamp=datetime.now(timezone.utc).isoformat(),
+            self._context = await self._browser.new_context(
+                viewport={
+                    "width": self.config.viewport_width,
+                    "height": self.config.viewport_height,
+                },
+                user_agent=self.config.user_agent,
             )
+            self._page = await self._context.new_page()
+            logger.info("Browser automation started")
 
-    async def post_to_facebook(
-        self,
-        content: str,
-        media_paths: tuple[str, ...] = (),
-        screenshot_dir: Path | None = None,
-    ) -> PostResult:
-        """Post content to Facebook.
+        except ImportError:
+            logger.warning(
+                "Playwright not installed. Install with: pip install playwright"
+            )
+        except Exception as e:
+            logger.error(f"Failed to start browser: {e}")
+            raise
+
+    async def stop(self) -> None:
+        """Stop the browser."""
+        if self._browser:
+            await self._browser.close()
+            self._browser = None
+            self._context = None
+            self._page = None
+            logger.info("Browser automation stopped")
+
+    async def login(
+        self, platform: str, username: str, password: str
+    ) -> bool:
+        """Login to a social media platform.
 
         Args:
-            content: Post content.
-            media_paths: Paths to media files.
-            screenshot_dir: Directory for screenshots.
+            platform: Platform name.
+            username: Username or email.
+            password: Password.
 
         Returns:
-            PostResult with success status and details.
+            True if login successful.
         """
+        if not self._page:
+            await self.start()
+
         try:
-            steps = self._get_facebook_post_steps(content, media_paths)
-
-            if screenshot_dir:
-                screenshot_dir.mkdir(parents=True, exist_ok=True)
-
-            await self._execute_steps(steps)
-
-            return PostResult(
-                success=True,
-                platform="Facebook",
-                timestamp=datetime.now(timezone.utc).isoformat(),
-            )
-
-        except SocialMediaError as e:
-            return PostResult(
-                success=False,
-                platform="Facebook",
-                error=str(e),
-                timestamp=datetime.now(timezone.utc).isoformat(),
-            )
-
-    async def post_to_instagram(
-        self,
-        content: str,
-        media_paths: tuple[str, ...] = (),
-        screenshot_dir: Path | None = None,
-    ) -> PostResult:
-        """Post content to Instagram.
-
-        Args:
-            content: Post caption.
-            media_paths: Paths to media files.
-            screenshot_dir: Directory for screenshots.
-
-        Returns:
-            PostResult with success status and details.
-        """
-        try:
-            steps = self._get_instagram_post_steps(content, media_paths)
-
-            if screenshot_dir:
-                screenshot_dir.mkdir(parents=True, exist_ok=True)
-
-            await self._execute_steps(steps)
-
-            return PostResult(
-                success=True,
-                platform="Instagram",
-                timestamp=datetime.now(timezone.utc).isoformat(),
-            )
-
-        except SocialMediaError as e:
-            return PostResult(
-                success=False,
-                platform="Instagram",
-                error=str(e),
-                timestamp=datetime.now(timezone.utc).isoformat(),
-            )
-
-    async def post_to_all(
-        self,
-        content: str,
-        media_paths: tuple[str, ...] = (),
-        platforms: list[str] | None = None,
-    ) -> dict[str, PostResult]:
-        """Post content to multiple platforms.
-
-        Args:
-            content: Post content.
-            media_paths: Paths to media files.
-            platforms: List of platforms (default: all).
-
-        Returns:
-            Dict mapping platform to PostResult.
-        """
-        if platforms is None:
-            platforms = ["X", "Facebook", "Instagram"]
-
-        results: dict[str, PostResult] = {}
-
-        for platform in platforms:
-            if platform == "X":
-                results["X"] = await self.post_to_x(content, media_paths)
-            elif platform == "Facebook":
-                results["Facebook"] = await self.post_to_facebook(content, media_paths)
-            elif platform == "Instagram":
-                results["Instagram"] = await self.post_to_instagram(content, media_paths)
+            if platform.lower() == "x" or platform.lower() == "twitter":
+                return await self._login_x(username, password)
+            elif platform.lower() == "facebook":
+                return await self._login_facebook(username, password)
+            elif platform.lower() == "linkedin":
+                return await self._login_linkedin(username, password)
             else:
-                results[platform] = PostResult(
-                    success=False,
-                    platform=platform,
-                    error=f"Unknown platform: {platform}",
-                    timestamp=datetime.now(timezone.utc).isoformat(),
-                )
+                logger.error(f"Unsupported platform: {platform}")
+                return False
 
-        return results
+        except Exception as e:
+            logger.error(f"Login failed: {e}")
+            return False
+
+    async def _login_x(
+        self, username: str, password: str
+    ) -> bool:
+        """Login to X (Twitter)."""
+        if not self._page:
+            return False
+
+        await self._page.goto("https://twitter.com/login")
+        await self._page.wait_for_load_state("networkidle")
+
+        # Fill login form (selectors may change)
+        await self._page.fill(
+            'input[autocomplete="username"]', username
+        )
+        await self._page.click('div[role="button"]:has-text("Next")')
+        await self._page.wait_for_timeout(1000)
+
+        await self._page.fill(
+            'input[type="password"]', password
+        )
+        await self._page.click('div[role="button"]:has-text("Log in")')
+        await self._page.wait_for_load_state("networkidle")
+
+        # Check if login successful
+        url = self._page.url
+        return "home" in url or "timeline" in url
+
+    async def _login_facebook(
+        self, username: str, password: str
+    ) -> bool:
+        """Login to Facebook."""
+        if not self._page:
+            return False
+
+        await self._page.goto("https://facebook.com")
+        await self._page.wait_for_load_state("networkidle")
+
+        # Fill login form
+        await self._page.fill("#email", username)
+        await self._page.fill("#pass", password)
+        await self._page.click('button[name="login"]')
+        await self._page.wait_for_load_state("networkidle")
+
+        # Check if login successful
+        url = self._page.url
+        return "facebook.com" in url and "login" not in url
+
+    async def _login_linkedin(
+        self, username: str, password: str
+    ) -> bool:
+        """Login to LinkedIn."""
+        if not self._page:
+            return False
+
+        await self._page.goto("https://linkedin.com/login")
+        await self._page.wait_for_load_state("networkidle")
+
+        # Fill login form
+        await self._page.fill("#username", username)
+        await self._page.fill("#password", password)
+        await self._page.click('button[type="submit"]')
+        await self._page.wait_for_load_state("networkidle")
+
+        # Check if login successful
+        url = self._page.url
+        return "linkedin.com/feed" in url
+
+    async def publish(
+        self, platform: str, content: str, media_paths: list[str] | None = None
+    ) -> PublishTask:
+        """Publish content to a platform.
+
+        Args:
+            platform: Platform name.
+            content: Content to publish.
+            media_paths: Optional media file paths.
+
+        Returns:
+            PublishTask with result.
+        """
+        task = PublishTask(
+            platform=platform,
+            content=content,
+            media_paths=media_paths,
+        )
+
+        if not self._page:
+            task.status = "error"
+            task.error = "Browser not started"
+            return task
+
+        try:
+            if platform.lower() == "x" or platform.lower() == "twitter":
+                await self._publish_x(content, media_paths)
+            elif platform.lower() == "facebook":
+                await self._publish_facebook(content, media_paths)
+            elif platform.lower() == "linkedin":
+                await self._publish_linkedin(content, media_paths)
+            else:
+                task.status = "error"
+                task.error = f"Unsupported platform: {platform}"
+                return task
+
+            task.status = "published"
+            task.result_url = self._page.url if self._page else None
+            logger.info(f"Published to {platform}")
+
+        except Exception as e:
+            task.status = "error"
+            task.error = str(e)
+            logger.error(f"Publish failed: {e}")
+
+        return task
+
+    async def _publish_x(
+        self, content: str, media_paths: list[str] | None
+    ) -> None:
+        """Publish to X (Twitter)."""
+        if not self._page:
+            return
+
+        await self._page.goto("https://twitter.com/home")
+        await self._page.wait_for_load_state("networkidle")
+
+        # Find and fill tweet box
+        tweet_box = self._page.locator(
+            'div[contenteditable="true"][data-testid="tweetTextarea_0"]'
+        )
+        await tweet_box.fill(content)
+
+        # Upload media if provided
+        if media_paths:
+            for media_path in media_paths[:4]:  # X allows up to 4 images
+                await self._page.locator(
+                    'input[type="file"][accept="image/*,video/*"]'
+                ).set_input_files(media_path)
+                await self._page.wait_for_timeout(1000)
+
+        # Click tweet button
+        await self._page.click(
+            'div[role="button"][data-testid="tweetButton"]'
+        )
+        await self._page.wait_for_load_state("networkidle")
+
+    async def _publish_facebook(
+        self, content: str, media_paths: list[str] | None
+    ) -> None:
+        """Publish to Facebook."""
+        if not self._page:
+            return
+
+        await self._page.goto("https://facebook.com")
+        await self._page.wait_for_load_state("networkidle")
+
+        # Click on "What's on your mind?" box
+        await self._page.click(
+            'div[role="button"][aria-label="What\'s on your mind?"]'
+        )
+        await self._page.wait_for_timeout(1000)
+
+        # Fill content
+        await self._page.fill(
+            'div[contenteditable="true"][data-testid="post-creation-textarea"]',
+            content,
+        )
+
+        # Upload media if provided
+        if media_paths:
+            await self._page.click(
+                'div[role="button"][aria-label="Photo/video"]'
+            )
+            for media_path in media_paths[:10]:  # Facebook allows up to 10
+                await self._page.locator(
+                    'input[type="file"][accept="image/*,video/*"]'
+                ).set_input_files(media_path)
+
+        # Click post button
+        await self._page.click(
+            'div[role="button"][aria-label="Post"]'
+        )
+        await self._page.wait_for_load_state("networkidle")
+
+    async def _publish_linkedin(
+        self, content: str, media_paths: list[str] | None
+    ) -> None:
+        """Publish to LinkedIn."""
+        if not self._page:
+            return
+
+        await self._page.goto("https://linkedin.com/feed")
+        await self._page.wait_for_load_state("networkidle")
+
+        # Click on "Start a post"
+        await self._page.click(
+            'div[role="button"][aria-label="Start a post"]'
+        )
+        await self._page.wait_for_timeout(1000)
+
+        # Fill content
+        await self._page.fill(
+            'div[contenteditable="true"][aria-label="What do you want to talk about?"]',
+            content,
+        )
+
+        # Upload media if provided
+        if media_paths:
+            await self._page.click(
+                'div[role="button"][aria-label="Add media"]'
+            )
+            for media_path in media_paths[:9]:  # LinkedIn allows up to 9
+                await self._page.locator(
+                    'input[type="file"]'
+                ).set_input_files(media_path)
+
+        # Click post button
+        await self._page.click(
+            'div[role="button"][aria-label="Post"]'
+        )
+        await self._page.wait_for_load_state("networkidle")
+
+    async def take_screenshot(
+        self, output_path: str | Path
+    ) -> str:
+        """Take a screenshot of the current page.
+
+        Args:
+            output_path: Path to save screenshot.
+
+        Returns:
+            Path to saved screenshot.
+        """
+        if not self._page:
+            raise RuntimeError("Browser not started")
+
+        output_path = Path(output_path)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        await self._page.screenshot(path=str(output_path))
+        logger.info(f"Screenshot saved to {output_path}")
+        return str(output_path)
+
+    async def get_current_url(self) -> str:
+        """Get the current page URL.
+
+        Returns:
+            Current URL.
+        """
+        if not self._page:
+            return ""
+        return self._page.url
 
 
-# Convenience function for synchronous usage (for testing)
-def create_automation(
-    browser_client: BrowserMCPProtocol | None = None,
-    vault_root: Path | None = None,
-) -> SocialMediaAutomation:
-    """Create a SocialMediaAutomation instance.
+class BrowserMCPTools:
+    """MCP tools for browser automation.
 
-    Args:
-        browser_client: Browser MCP client.
-        vault_root: Vault root path.
-
-    Returns:
-        Configured SocialMediaAutomation instance.
+    Provides a tool-based interface for AI agents to control
+    browser automation.
     """
-    return SocialMediaAutomation(browser_client, vault_root)
+
+    def __init__(self, automation: SocialMediaAutomation | None = None):
+        """Initialize browser MCP tools.
+
+        Args:
+            automation: Social media automation instance.
+        """
+        self.automation = automation or SocialMediaAutomation()
+
+    def get_tools(self) -> list[dict[str, Any]]:
+        """Get list of available tools.
+
+        Returns:
+            List of tool definitions.
+        """
+        return [
+            {
+                "name": "browser_start",
+                "description": "Start the browser automation",
+                "parameters": {"headless": {"type": "boolean", "default": True}},
+            },
+            {
+                "name": "browser_stop",
+                "description": "Stop the browser automation",
+            },
+            {
+                "name": "browser_login",
+                "description": "Login to a social media platform",
+                "parameters": {
+                    "platform": {"type": "string"},
+                    "username": {"type": "string"},
+                    "password": {"type": "string"},
+                },
+            },
+            {
+                "name": "browser_publish",
+                "description": "Publish content to a platform",
+                "parameters": {
+                    "platform": {"type": "string"},
+                    "content": {"type": "string"},
+                    "media_paths": {"type": "array", "items": {"type": "string"}},
+                },
+            },
+            {
+                "name": "browser_screenshot",
+                "description": "Take a screenshot of the current page",
+                "parameters": {
+                    "output_path": {"type": "string"},
+                },
+            },
+        ]
+
+    async def execute_tool(
+        self, tool_name: str, **kwargs: Any
+    ) -> dict[str, Any]:
+        """Execute a browser tool.
+
+        Args:
+            tool_name: Name of the tool to execute.
+            **kwargs: Tool parameters.
+
+        Returns:
+            Tool execution result.
+        """
+        if tool_name == "browser_start":
+            await self.automation.start()
+            return {"success": True, "message": "Browser started"}
+
+        elif tool_name == "browser_stop":
+            await self.automation.stop()
+            return {"success": True, "message": "Browser stopped"}
+
+        elif tool_name == "browser_login":
+            success = await self.automation.login(
+                kwargs.get("platform", ""),
+                kwargs.get("username", ""),
+                kwargs.get("password", ""),
+            )
+            return {
+                "success": success,
+                "message": "Login successful" if success else "Login failed",
+            }
+
+        elif tool_name == "browser_publish":
+            task = await self.automation.publish(
+                kwargs.get("platform", ""),
+                kwargs.get("content", ""),
+                kwargs.get("media_paths"),
+            )
+            return task.__dict__
+
+        elif tool_name == "browser_screenshot":
+            path = await self.automation.take_screenshot(
+                kwargs.get("output_path", "screenshot.png")
+            )
+            return {"success": True, "path": path}
+
+        else:
+            return {
+                "success": False,
+                "error": f"Unknown tool: {tool_name}",
+            }
