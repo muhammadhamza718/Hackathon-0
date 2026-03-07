@@ -44,6 +44,12 @@ from .social_automation import (
     SocialMediaAutomation,
 )
 from .briefing_engine import CEOBriefingEngine, RevenueData
+from .revenue_analysis import (
+    PeriodComparison,
+    RevenueAnalyzer,
+    RevenuePoint,
+    RevenueTrend,
+)
 from .exceptions import (
     AuditError,
     BriefingError,
@@ -111,6 +117,11 @@ __all__ = [
     # Briefing
     "CEOBriefingEngine",
     "RevenueData",
+    # Revenue Analysis
+    "RevenueAnalyzer",
+    "RevenuePoint",
+    "RevenueTrend",
+    "PeriodComparison",
     # Exceptions
     "GoldTierError",
     "OdooIntegrationError",
