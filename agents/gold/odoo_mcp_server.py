@@ -1,365 +1,364 @@
-"""Odoo MCP Server - JSON-RPC integration via Model Context Protocol.
+"""Odoo MCP server wrapper for JSON-RPC integration.
 
-This module provides an MCP server wrapper around the Odoo RPC client,
-enabling external tools to interact with Odoo through standardized MCP
-tool calls.
-
-All WRITE operations are drafted to /Pending_Approval/ per Constitution XI.
+Provides an MCP (Model Context Protocol) server interface for Odoo
+operations, enabling AI agents to interact with Odoo through a
+standardized protocol.
 """
 
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 from typing import Any
 
-from agents.gold.odoo_rpc_client import OdooConfig, OdooRPCClient, load_odoo_config
-from agents.gold.models import OdooSession
+from .odoo_rpc_client import OdooRPCClient
+from .resilient_executor import ResilientExecutor
 
 logger = logging.getLogger(__name__)
 
 
 class OdooMCPServer:
-    """MCP server for Odoo operations.
+    """MCP server wrapper for Odoo JSON-RPC operations.
 
-    Exposes Odoo CRUD operations as MCP tools with proper HITL gating
-    for write operations.
+    This class provides a standardized interface for AI agents to
+    interact with Odoo through MCP tools and resources.
+
+    Tools provided:
+    - odoo_search: Search for records
+    - odoo_read: Read record fields
+    - odoo_create: Create new records
+    - odoo_write: Update existing records
+    - odoo_unlink: Delete records
+    - odoo_call: Call a method on a record
+    - odoo_search_read: Search and read in one call
     """
 
     def __init__(
         self,
-        vault_root: Path,
-        config: OdooConfig | None = None,
-        session: OdooSession | None = None,
-    ) -> None:
-        """Initialize Odoo MCP server.
+        rpc_client: OdooRPCClient | None = None,
+        executor: ResilientExecutor | None = None,
+    ):
+        """Initialize the Odoo MCP server.
 
         Args:
-            vault_root: Root path of the vault for approval workflows.
-            config: Optional Odoo configuration. If not provided, loads
-                   from environment variables.
-            session: Optional injected Odoo session for testing/DI.
+            rpc_client: Odoo RPC client instance.
+            executor: Resilient executor for fault tolerance.
         """
-        self.vault_root = vault_root
-        self._config = config or load_odoo_config()
-        self._client = OdooRPCClient(
-            config=self._config,
-            vault_root=vault_root,
-            session=session,
+        self.rpc_client = rpc_client or OdooRPCClient()
+        self.executor = executor or ResilientExecutor()
+
+    def connect(self) -> None:
+        """Connect to Odoo server."""
+        self.rpc_client.authenticate()
+        logger.info("Odoo MCP server connected")
+
+    def disconnect(self) -> None:
+        """Disconnect from Odoo server."""
+        self.rpc_client.disconnect()
+        logger.info("Odoo MCP server disconnected")
+
+    def is_connected(self) -> bool:
+        """Check if connected to Odoo."""
+        return self.rpc_client.is_connected()
+
+    # -----------------------------------------------------------------------
+    # MCP Tools
+    # -----------------------------------------------------------------------
+
+    def odoo_search(
+        self,
+        model: str,
+        domain: list[Any] | None = None,
+        limit: int | None = None,
+        offset: int = 0,
+        order: str | None = None,
+    ) -> list[int]:
+        """Search for record IDs.
+
+        Args:
+            model: The model name (e.g., 'account.move').
+            domain: Search domain as list of tuples.
+            limit: Maximum number of records to return.
+            offset: Number of records to skip.
+            order: Order by field name.
+
+        Returns:
+            List of record IDs.
+        """
+        return self.executor.execute_or_raise(
+            self.rpc_client.search,
+            model,
+            domain=domain,
+            limit=limit,
+            offset=offset,
+            order=order,
+            operation_name=f"odoo_search_{model}",
         )
-        self._authenticated = False
 
-    # ------------------------------------------------------------------
-    # MCP Tool Definitions
-    # ------------------------------------------------------------------
-
-    def get_tools(self) -> list[dict[str, Any]]:
-        """Return list of MCP tool definitions.
-
-        Returns:
-            List of tool definitions compatible with MCP protocol.
-        """
-        return [
-            {
-                "name": "odoo_authenticate",
-                "description": "Authenticate to Odoo and establish a session",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {},
-                    "required": [],
-                },
-            },
-            {
-                "name": "odoo_search_read",
-                "description": "Search and read records from an Odoo model (autonomous)",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "model": {
-                            "type": "string",
-                            "description": "Odoo model name (e.g., 'res.partner', 'account.move')",
-                        },
-                        "domain": {
-                            "type": "array",
-                            "description": "Search domain as list of tuples",
-                            "items": {"type": "array"},
-                        },
-                        "fields": {
-                            "type": "array",
-                            "description": "List of field names to retrieve",
-                            "items": {"type": "string"},
-                        },
-                        "limit": {
-                            "type": "integer",
-                            "description": "Maximum number of records to return",
-                            "default": 100,
-                        },
-                    },
-                    "required": ["model", "domain", "fields"],
-                },
-            },
-            {
-                "name": "odoo_read_by_id",
-                "description": "Read specific records by ID from an Odoo model",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "model": {
-                            "type": "string",
-                            "description": "Odoo model name",
-                        },
-                        "ids": {
-                            "type": "array",
-                            "description": "List of record IDs to read",
-                            "items": {"type": "integer"},
-                        },
-                        "fields": {
-                            "type": "array",
-                            "description": "List of field names to retrieve",
-                            "items": {"type": "string"},
-                        },
-                    },
-                    "required": ["model", "ids", "fields"],
-                },
-            },
-            {
-                "name": "odoo_draft_create",
-                "description": "Draft a create operation for approval (requires HITL)",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "model": {
-                            "type": "string",
-                            "description": "Odoo model name",
-                        },
-                        "values": {
-                            "type": "object",
-                            "description": "Field values for the new record",
-                        },
-                        "rationale": {
-                            "type": "string",
-                            "description": "Business justification for this create operation",
-                        },
-                    },
-                    "required": ["model", "values", "rationale"],
-                },
-            },
-            {
-                "name": "odoo_draft_write",
-                "description": "Draft a write (update) operation for approval (requires HITL)",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "model": {
-                            "type": "string",
-                            "description": "Odoo model name",
-                        },
-                        "ids": {
-                            "type": "array",
-                            "description": "List of record IDs to update",
-                            "items": {"type": "integer"},
-                        },
-                        "values": {
-                            "type": "object",
-                            "description": "Field values to update",
-                        },
-                        "rationale": {
-                            "type": "string",
-                            "description": "Business justification for this update",
-                        },
-                    },
-                    "required": ["model", "ids", "values", "rationale"],
-                },
-            },
-            {
-                "name": "odoo_execute_approved",
-                "description": "Execute a previously approved Odoo operation",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "operation_id": {
-                            "type": "string",
-                            "description": "Operation ID from the approved file",
-                        },
-                        "model": {
-                            "type": "string",
-                            "description": "Odoo model name",
-                        },
-                        "method": {
-                            "type": "string",
-                            "description": "Operation method (create/write)",
-                        },
-                    },
-                    "required": ["operation_id", "model", "method"],
-                },
-            },
-        ]
-
-    # ------------------------------------------------------------------
-    # MCP Tool Handlers
-    # ------------------------------------------------------------------
-
-    def handle_tool_call(
-        self, tool_name: str, arguments: dict[str, Any]
-    ) -> dict[str, Any]:
-        """Handle an MCP tool call.
+    def odoo_read(
+        self,
+        model: str,
+        ids: list[int],
+        fields: list[str] | None = None,
+    ) -> list[dict[str, Any]]:
+        """Read records by ID.
 
         Args:
-            tool_name: Name of the tool to call.
-            arguments: Tool arguments as a dict.
+            model: The model name.
+            ids: List of record IDs to read.
+            fields: List of field names to return.
 
         Returns:
-            Tool execution result with success/error status.
+            List of records as dictionaries.
         """
-        handlers = {
-            "odoo_authenticate": self._tool_authenticate,
-            "odoo_search_read": self._tool_search_read,
-            "odoo_read_by_id": self._tool_read_by_id,
-            "odoo_draft_create": self._tool_draft_create,
-            "odoo_draft_write": self._tool_draft_write,
-            "odoo_execute_approved": self._tool_execute_approved,
-        }
+        return self.executor.execute_or_raise(
+            self.rpc_client.read,
+            model,
+            ids,
+            fields=fields,
+            operation_name=f"odoo_read_{model}",
+        )
 
-        handler = handlers.get(tool_name)
-        if handler is None:
-            return {
-                "success": False,
-                "error": f"Unknown tool: {tool_name}",
-            }
+    def odoo_create(
+        self, model: str, values: dict[str, Any]
+    ) -> int | list[int]:
+        """Create new records.
 
+        Args:
+            model: The model name.
+            values: Field values for the new record(s).
+
+        Returns:
+            ID of created record, or list of IDs.
+        """
+        return self.executor.execute_or_raise(
+            self.rpc_client.create,
+            model,
+            values,
+            operation_name=f"odoo_create_{model}",
+        )
+
+    def odoo_write(
+        self, model: str, ids: list[int], values: dict[str, Any]
+    ) -> bool:
+        """Update existing records.
+
+        Args:
+            model: The model name.
+            ids: List of record IDs to update.
+            values: Field values to update.
+
+        Returns:
+            True if successful.
+        """
+        return self.executor.execute_or_raise(
+            self.rpc_client.write,
+            model,
+            ids,
+            values,
+            operation_name=f"odoo_write_{model}",
+        )
+
+    def odoo_unlink(self, model: str, ids: list[int]) -> bool:
+        """Delete records.
+
+        Args:
+            model: The model name.
+            ids: List of record IDs to delete.
+
+        Returns:
+            True if successful.
+        """
+        return self.executor.execute_or_raise(
+            self.rpc_client.unlink,
+            model,
+            ids,
+            operation_name=f"odoo_unlink_{model}",
+        )
+
+    def odoo_call(
+        self,
+        model: str,
+        record_id: int,
+        method: str,
+        args: list[Any] | None = None,
+        kwargs: dict[str, Any] | None = None,
+    ) -> Any:
+        """Call a method on a specific record.
+
+        Args:
+            model: The model name.
+            record_id: The record ID.
+            method: The method name.
+            args: Positional arguments.
+            kwargs: Keyword arguments.
+
+        Returns:
+            The method result.
+        """
+        return self.executor.execute_or_raise(
+            self.rpc_client.call_method,
+            model,
+            record_id,
+            method,
+            *(args or []),
+            **(kwargs or {}),
+            operation_name=f"odoo_call_{model}_{method}",
+        )
+
+    def odoo_search_read(
+        self,
+        model: str,
+        domain: list[Any] | None = None,
+        fields: list[str] | None = None,
+        limit: int | None = None,
+        offset: int = 0,
+        order: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Search and read records in one call.
+
+        Args:
+            model: The model name.
+            domain: Search domain.
+            fields: List of fields to return.
+            limit: Maximum number of records.
+            offset: Number of records to skip.
+            order: Order by field.
+
+        Returns:
+            List of records as dictionaries.
+        """
+        return self.executor.execute_or_raise(
+            self.rpc_client.search_read,
+            model,
+            domain=domain,
+            fields=fields,
+            limit=limit,
+            offset=offset,
+            order=order,
+            operation_name=f"odoo_search_read_{model}",
+        )
+
+    # -----------------------------------------------------------------------
+    # Accounting-specific helpers
+    # -----------------------------------------------------------------------
+
+    def get_invoices(
+        self,
+        state: str | None = None,
+        move_type: str | None = None,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        """Get invoices with optional filtering.
+
+        Args:
+            state: Filter by state (draft, posted, cancel).
+            move_type: Filter by type (out_invoice, in_invoice, etc.).
+            limit: Maximum number of invoices.
+
+        Returns:
+            List of invoice records.
+        """
+        domain = []
+        if state:
+            domain.append(("state", "=", state))
+        if move_type:
+            domain.append(("move_type", "=", move_type))
+
+        return self.odoo_search_read(
+            "account.move",
+            domain=domain,
+            fields=[
+                "id",
+                "name",
+                "state",
+                "move_type",
+                "partner_id",
+                "amount_total",
+                "amount_due",
+                "invoice_date",
+                "invoice_date_due",
+            ],
+            limit=limit,
+        )
+
+    def get_bank_statements(
+        self, limit: int = 100
+    ) -> list[dict[str, Any]]:
+        """Get bank statements for reconciliation.
+
+        Args:
+            limit: Maximum number of statements.
+
+        Returns:
+            List of bank statement records.
+        """
+        return self.odoo_search_read(
+            "account.bank.statement.line",
+            domain=[],
+            fields=[
+                "id",
+                "name",
+                "date",
+                "amount",
+                "partner_name",
+                "payment_ref",
+                "state",
+            ],
+            limit=limit,
+        )
+
+    def reconcile_bank_statement(
+        self, statement_line_id: int, move_line_ids: list[int]
+    ) -> bool:
+        """Reconcile a bank statement line with move lines.
+
+        Args:
+            statement_line_id: The bank statement line ID.
+            move_line_ids: List of move line IDs to reconcile with.
+
+        Returns:
+            True if successful.
+        """
+        return self.odoo_write(
+            "account.bank.statement.line",
+            [statement_line_id],
+            {
+                "reconciled_move_line_ids": [(6, 0, move_line_ids)],
+            },
+        )
+
+    # -----------------------------------------------------------------------
+    # Resource interface
+    # -----------------------------------------------------------------------
+
+    def get_resource(
+        self, uri: str
+    ) -> dict[str, Any] | None:
+        """Get a resource by URI.
+
+        Supports URIs like:
+        - odoo://account.move/123
+        - odoo://res.partner/456
+
+        Args:
+            uri: The resource URI.
+
+        Returns:
+            Resource data as dictionary, or None if not found.
+        """
+        if not uri.startswith("odoo://"):
+            return None
+
+        # Parse URI: odoo://model/id
+        parts = uri.replace("odoo://", "").split("/")
+        if len(parts) != 2:
+            return None
+
+        model, record_id_str = parts
         try:
-            result = handler(arguments)
-            return {"success": True, "result": result}
-        except Exception as exc:
-            logger.exception("Tool call failed: %s", tool_name)
-            return {
-                "success": False,
-                "error": str(exc),
-            }
+            record_id = int(record_id_str)
+        except ValueError:
+            return None
 
-    def _tool_authenticate(self, args: dict[str, Any]) -> dict[str, Any]:
-        """Authenticate to Odoo."""
-        session = self._client.authenticate()
-        self._authenticated = True
-        return {
-            "uid": session.uid,
-            "database": session.database,
-            "authenticated": session.authenticated,
-        }
-
-    def _tool_search_read(
-        self, args: dict[str, Any]
-    ) -> list[dict[str, Any]]:
-        """Execute search_read on Odoo model."""
-        if not self._authenticated:
-            raise RuntimeError("Not authenticated. Call odoo_authenticate first.")
-
-        return self._client.search_read(
-            model=args["model"],
-            domain=args["domain"],
-            fields=args["fields"],
-            limit=args.get("limit", 100),
-        )
-
-    def _tool_read_by_id(
-        self, args: dict[str, Any]
-    ) -> list[dict[str, Any]]:
-        """Read records by ID."""
-        if not self._authenticated:
-            raise RuntimeError("Not authenticated. Call odoo_authenticate first.")
-
-        return self._client.read(
-            model=args["model"],
-            ids=args["ids"],
-            fields=args["fields"],
-        )
-
-    def _tool_draft_create(self, args: dict[str, Any]) -> dict[str, Any]:
-        """Draft a create operation."""
-        if not self._authenticated:
-            raise RuntimeError("Not authenticated. Call odoo_authenticate first.")
-
-        operation = self._client.draft_create(
-            model=args["model"],
-            values=args["values"],
-            rationale=args["rationale"],
-        )
-
-        return {
-            "operation_id": operation.operation_id,
-            "status": operation.status,
-            "approval_file": operation.operation_id,  # Reference to approval file
-        }
-
-    def _tool_draft_write(self, args: dict[str, Any]) -> dict[str, Any]:
-        """Draft a write operation."""
-        if not self._authenticated:
-            raise RuntimeError("Not authenticated. Call odoo_authenticate first.")
-
-        operation = self._client.draft_write(
-            model=args["model"],
-            ids=args["ids"],
-            values=args["values"],
-            rationale=args["rationale"],
-        )
-
-        return {
-            "operation_id": operation.operation_id,
-            "status": operation.status,
-            "approval_file": operation.operation_id,
-        }
-
-    def _tool_execute_approved(
-        self, args: dict[str, Any]
-    ) -> dict[str, Any]:
-        """Execute an approved operation."""
-        if not self._authenticated:
-            raise RuntimeError("Not authenticated. Call odoo_authenticate first.")
-
-        from agents.gold.models import OdooOperation
-
-        operation = OdooOperation(
-            operation_id=args["operation_id"],
-            model=args["model"],
-            method=args["method"],
-            args=(),  # Will be reconstructed from approval file
-        )
-
-        result = self._client.execute_approved(operation)
-
-        return {
-            "operation_id": result.operation_id,
-            "status": result.status,
-            "result": result.result,
-        }
-
-    # ------------------------------------------------------------------
-    # Server Lifecycle
-    # ------------------------------------------------------------------
-
-    def run(self) -> None:
-        """Run the MCP server (blocking).
-
-        In production, this would integrate with an MCP host.
-        For now, this is a placeholder for future MCP integration.
-        """
-        logger.info("Odoo MCP Server initialized")
-        logger.info("Available tools: %s", [t["name"] for t in self.get_tools()])
-        # Future: integrate with actual MCP protocol handler
-        # For now, the server is available for programmatic use
-
-
-def create_odoo_mcp_server(
-    vault_root: Path,
-    config: OdooConfig | None = None,
-) -> OdooMCPServer:
-    """Factory function to create an Odoo MCP server instance.
-
-    Args:
-        vault_root: Root path of the vault.
-        config: Optional Odoo configuration.
-
-    Returns:
-        Configured OdooMCPServer instance.
-    """
-    return OdooMCPServer(vault_root=vault_root, config=config)
+        records = self.odoo_read(model, [record_id])
+        return records[0] if records else None
