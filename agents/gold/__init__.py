@@ -30,6 +30,7 @@ from .social_bridge import (
     SocialBridge,
     XAdapter,
 )
+from .image_optimizer import ImageOptimizer
 from .exceptions import (
     AuditError,
     BriefingError,
@@ -84,6 +85,7 @@ __all__ = [
     "XAdapter",
     "FacebookAdapter",
     "InstagramAdapter",
+    "ImageOptimizer",
     # Exceptions
     "GoldTierError",
     "OdooIntegrationError",
