@@ -2,341 +2,192 @@
 
 ## Overview
 
-The Gold Tier extends the Bronze/Silver architecture with autonomous business operations capabilities including Odoo accounting integration, social media management, and CEO briefing generation.
+The Gold Tier Autonomous Agent is a self-correcting, persistent Digital FTE (Full-Time Employee) that operates with full autonomy while maintaining strict safety gates for high-risk operations.
 
-## Architecture Diagram
+## Core Principles
 
-```mermaid
-graph TB
-    subgraph Gold Tier
-        AL[Ralph Wiggum Autonomous Loop]
-        OE[Odoo RPC Client]
-        SB[Social Bridge]
-        BE[CEO Briefing Engine]
-        RE[Resilient Executor]
-        SG[Safety Gate]
-        AL[Audit Logger]
-    end
-    
-    subgraph External Systems
-        Odoo[Odoo 19+ JSON-RPC]
-        Social[Social Media Platforms]
-        Browser[Browser MCP]
-    end
-    
-    subgraph Vault
-        NA[/Needs_Action/]
-        PA[/Pending_Approval/]
-        AP[/Approved/]
-        DN[/Done/]
-        LG[/Logs/]
-    end
-    
-    AL --> OE
-    AL --> SB
-    AL --> BE
-    AL --> RE
-    
-    OE --> Odoo
-    SB --> Social
-    SB --> Browser
-    
-    OE --> PA
-    SB --> PA
-    PA --> AP
-    AP --> OE
-    AP --> SB
-    
-    AL --> LG
-    OE --> AL
-    SB --> AL
-    BE --> AL
+1. **Autonomy with Safety**: Full operational autonomy with HITL (Human-In-The-Loop) approval for high-risk actions
+2. **Auditability**: Every action is logged to an immutable audit trail
+3. **Resilience**: Automatic retry with exponential backoff and circuit breaker patterns
+4. **Persistence**: State checkpoints enable recovery from interruptions
+5. **Transparency**: All decisions include rationale documentation
+
+## Architecture Components
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Gold Tier Agent                          │
+├─────────────────────────────────────────────────────────────┤
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐  │
+│  │   Ralph     │  │   Safety    │  │      Audit          │  │
+│  │  Wiggum     │──│    Gate     │──│      Logger         │  │
+│  │   Loop      │  │   (HITL)    │  │                     │  │
+│  └─────────────┘  └─────────────┘  └─────────────────────┘  │
+│         │                │                    │              │
+│         ▼                ▼                    ▼              │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐  │
+│  │  Progress   │  │ Resilient   │  │   Configuration     │  │
+│  │  Tracker    │  │  Executor   │  │      Manager        │  │
+│  └─────────────┘  └─────────────┘  └─────────────────────┘  │
+│                                                              │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │              Integration Layer                        │   │
+│  ├─────────────┬─────────────┬─────────────────────────┤   │
+│  │    Odoo     │   Social    │      Browser            │   │
+│  │    RPC      │   Media     │    Automation           │   │
+│  │   Client    │   Bridge    │                         │   │
+│  └─────────────┴─────────────┴─────────────────────────┘   │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-## Core Components
+## Key Components
 
-### 1. Ralph Wiggum Autonomous Loop
+### Ralph Wiggum Loop
 
-The autonomous execution engine that iterates over tasks until completion.
+The autonomous execution engine that:
+- Continuously scans for work in `/Needs_Action/`
+- Executes tasks with appropriate safety gates
+- Logs all actions to the audit trail
+- Self-corrects on failures
+- Persists state for recovery
 
-**Key Features:**
-- Persistent state checkpointing for session resumption
-- Exit promise detection (all plans complete + Needs_Action empty)
-- Signal handling for graceful shutdown
-- Configurable iteration limits and checkpoint intervals
+**Exit Conditions:**
+- No work found for N consecutive iterations
+- Max iterations reached
+- Manual interrupt
+- Exit promise met
 
-**Files:**
-- `agents/gold/autonomous_loop.py` - Main loop implementation
-- `agents/gold/config.py` - Loop configuration constants
+### Safety Gate (HITL)
 
-### 2. Odoo 19+ Integration
+All high-risk operations require human approval:
+- Odoo write operations
+- Social media publishing
+- Payments over $100
+- External communications
 
-JSON-RPC client for Odoo Community Edition accounting operations.
+Approval requests are stored in `/Pending_Approval/` with full context.
 
-**Key Features:**
-- Authentication and session management
-- Autonomous READ operations (search_read, read)
-- HITL-gated WRITE operations (create, write)
-- Credential redaction in logs and payloads
+### Audit Logger
 
-**Files:**
-- `agents/gold/odoo_rpc_client.py` - RPC client implementation
-- `agents/gold/config.py` - Odoo configuration
+Immutable JSON audit log with:
+- Timestamp (ISO-8601 UTC)
+- Action type
+- Rationale (mandatory)
+- Result (success/failure/warning/skipped)
+- Iteration count
+- Duration
 
-**Safety:**
-- All WRITE operations draft to `/Pending_Approval/`
-- Execution requires file movement to `/Approved/`
-- API keys never persisted to vault files
+### Resilient Executor
 
-### 3. Social Media Bridge
+Fault-tolerant execution with:
+- Exponential backoff retry
+- Circuit breaker pattern
+- Configurable retry limits
+- Execution metrics
 
-Multi-platform social media management via Browser MCP.
+### Integration Layer
 
-**Key Features:**
+#### Odoo Integration
+- JSON-RPC client for Odoo 19+
+- Connection pooling
+- MCP server wrapper
+- Operation logging with credential redaction
+
+#### Social Media
 - Platform adapters (X, Facebook, Instagram)
-- Content adaptation per platform limits
-- HITL approval gating for all posts
-- Engagement analytics aggregation
+- Content adaptation per platform
+- Image optimization
+- Analytics aggregation
+- Browser automation for platforms without APIs
 
-**Files:**
-- `agents/gold/social_bridge.py` - Bridge implementation
-- `agents/gold/config.py` - Platform limits and defaults
+#### CEO Briefing Engine
+- Revenue MTD vs Goal analysis
+- Task bottleneck detection
+- Subscription optimization recommendations
+- Automated markdown generation
 
-**Platform Limits:**
-| Platform | Max Text | Max Images | Max Hashtags |
-|----------|----------|------------|--------------|
-| X | 280 | 4 | 3 |
-| Facebook | 63,206 | 10 | 30 |
-| Instagram | 2,200 | 10 | 30 |
+## Data Models
 
-### 4. CEO Briefing Engine
+All data models use Pydantic v2 for:
+- Runtime validation
+- Type safety
+- Serialization
+- Documentation
 
-Weekly business audit and intelligence report generator.
+Key models:
+- `GoldAuditEntry`: Immutable audit record
+- `LoopState`: Serializable checkpoint
+- `OdooSession`: Authenticated session state
+- `SocialDraft`: Platform-adapted content
+- `CEOBriefing`: Generated executive summary
 
-**Key Features:**
-- Revenue analysis (MTD vs Goal)
-- Bottleneck detection (stale tasks)
-- Subscription optimization audit
-- Customizable templates per business type
-
-**Files:**
-- `agents/gold/briefing_engine.py` - Briefing generation
-- `agents/gold/config.py` - Briefing configuration
-
-**Schedule:**
-- Default: Sunday at 22:00
-- Output: `/Needs_Action/CEO-Briefing-YYYY-Www.md`
-
-### 5. Resilient Executor
-
-Three-layer resilience architecture for API operations.
-
-**Layers:**
-1. **Exponential Backoff** - For transient errors (429, 5xx, timeouts)
-2. **Quarantine** - For logic errors (400, 401, 403, 422)
-3. **Circuit Breaker** - Opens after 3 consecutive failures
-
-**Files:**
-- `agents/gold/resilient_executor.py` - Executor implementation
-- `agents/gold/config.py` - Resilience configuration
-
-### 6. Safety Gate
-
-Gold-tier HITL gate with payment threshold and social gating.
-
-**Triggers:**
-- All social media posts
-- All Odoo WRITE operations
-- Payments > $100
-
-**Files:**
-- `agents/gold/safety_gate.py` - Safety gate implementation
-
-### 7. Audit Logger
-
-JSON-format audit trail with mandatory rationale field.
-
-**Schema:**
-```json
-{
-  "timestamp": "2026-03-08T10:00:00Z",
-  "action": "odoo_read",
-  "source_file": "Needs_Action/task.md",
-  "details": "Fetch invoices",
-  "result": "success",
-  "rationale": "CEO Briefing revenue aggregation",
-  "iteration": 5,
-  "tier": "gold",
-  "duration_ms": 150
-}
-```
-
-**Files:**
-- `agents/gold/audit_gold.py` - Audit logger
-- `agents/gold/models.py` - GoldAuditEntry model
-
-## Data Flow
-
-### Task Execution Flow
+## Directory Structure
 
 ```
-1. Loop detects task in /Needs_Action/ or incomplete Plan
-2. Determines if action requires HITL approval
-3. If HITL required:
-   a. Draft to /Pending_Approval/
-   b. Halt execution
-   c. Wait for human to move to /Approved/
-   d. Execute action
-   e. Move approval file to /Done/
-4. If no HITL required:
-   a. Execute action directly
-5. Log action to /Logs/YYYY-MM-DD.json
-6. Move task to /Done/ when complete
+agents/gold/
+├── __init__.py              # Package exports
+├── models.py                # Pydantic data models
+├── exceptions.py            # Exception hierarchy
+├── config.py                # Configuration management
+├── audit_gold.py            # Audit logger
+├── safety_gate.py           # HITL approval gate
+├── resilient_executor.py    # Retry and circuit breaker
+├── autonomous_loop.py       # Ralph Wiggum Loop
+├── progress_tracker.py      # Progress tracking
+├── odoo_rpc_client.py       # Odoo JSON-RPC client
+├── odoo_mcp_server.py       # Odoo MCP wrapper
+├── odoo_connection_pool.py  # Connection pooling
+├── social_bridge.py         # Social media adapters
+├── social_analytics.py      # Analytics aggregation
+├── social_automation.py     # Browser automation
+├── image_optimizer.py       # Image compression
+├── briefing_engine.py       # CEO briefing generation
+├── revenue_analysis.py      # Revenue trend analysis
+└── subscription_tracker.py  # Subscription management
 ```
 
-### CEO Briefing Flow
+## Safety Guarantees
 
-```
-1. CronWatcher triggers on Sunday at 22:00
-2. BriefingEngine aggregates data:
-   a. Revenue from Odoo (search_read invoices)
-   b. Bottlenecks from /Needs_Action/ (age > 48h)
-   c. Subscriptions from Company_Handbook.md
-3. Generate markdown briefing
-4. Write to /Needs_Action/CEO-Briefing-YYYY-Www.md
-5. Log action to audit trail
-```
+1. **No Silent Failures**: All errors are logged and reported
+2. **No Unauthorized Actions**: High-risk actions require HITL
+3. **No Data Loss**: State checkpoints enable recovery
+4. **No Infinite Loops**: Max iterations and idle detection
+5. **No Credential Exposure**: Credentials never logged or persisted
 
-## Configuration
+## Operational Modes
 
-All Gold Tier configuration is centralized in `agents/gold/config.py`.
+### Development Mode
+- Verbose logging
+- Relaxed rate limits
+- Local Odoo instance
 
-### Environment Variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `MAX_LOOP_ITERATIONS` | 1000 | Maximum loop iterations |
-| `LOOP_CHECKPOINT_INTERVAL` | 1 | Checkpoint frequency |
-| `ODOO_TIMEOUT` | 30 | Odoo RPC timeout (seconds) |
-| `ODOO_MAX_RETRIES` | 3 | Odoo retry attempts |
-| `BRIEFING_DAY` | 6 | Briefing day (0=Mon, 6=Sun) |
-| `BRIEFING_HOUR` | 22 | Briefing hour (24h) |
-| `REVENUE_GOAL` | 10000.0 | Monthly revenue target |
-| `PAYMENT_APPROVAL_THRESHOLD` | 100.0 | Payment HITL threshold |
-
-## Testing
-
-### Unit Tests
-
-```bash
-pytest tests/unit/test_gold_*.py -v
-```
-
-### Integration Tests
-
-```bash
-pytest tests/integration/test_gold_*.py -v
-```
-
-### Test Coverage
-
-- Models: Pydantic validation tests
-- Loop: State persistence, exit promise, signal handling
-- Odoo: Authentication, CRUD operations, approval workflow
-- Social: Platform adapters, content validation, approval workflow
-- Briefing: Revenue aggregation, bottleneck detection, subscription audit
-- Resilience: Backoff, circuit breaker, quarantine
-- Safety: HITL detection, threshold checks, approval workflow
-
-## Security
-
-### Credential Handling
-
-- API keys loaded from `.env` only
-- Never persisted to vault files
-- Redacted in audit logs (`***`)
-- Redacted in JSON-RPC payloads
-
-### HITL Safety Gates
-
-- All WRITE operations require approval
-- All social posts require approval
-- Payments > $100 require approval
-- Approval files must be moved to `/Approved/` before execution
-
-### Audit Trail
-
-- All actions logged with rationale
-- Immutable JSON log files
-- Daily rotation (`YYYY-MM-DD.json`)
-- Includes duration metrics
-
-## Error Recovery
-
-### Transient Errors
-
-1. Exponential backoff: 1s, 2s, 4s, 8s, 16s (capped at 60s)
-2. Retry up to 3 times
-3. Log each retry attempt
-
-### Logic Errors
-
-1. Quarantine immediately (no retry)
-2. Create P0 alert in `/Needs_Action/`
-3. Move failed item to quarantine
-
-### Circuit Breaker
-
-1. Track consecutive failures per API
-2. Open circuit after 3 failures
-3. Reject calls while open
-4. Reset on success
+### Production Mode
+- Structured JSON logging
+- Strict rate limits
+- Production Odoo instance
+- Enhanced monitoring
 
 ## Monitoring
 
-### Key Metrics
+Key metrics to track:
+- Loop iteration success rate
+- Average iteration duration
+- HITL approval turnaround time
+- Circuit breaker status
+- Queue depth (/Needs_Action/ count)
 
-- Loop iterations per session
-- Tasks completed per iteration
-- Average task duration
-- API error rates
-- Circuit breaker state
-- Queue depths (Pending_Approval, Needs_Action)
+## Extension Points
 
-### Log Analysis
+The architecture supports extension through:
+1. **Work Handlers**: Register custom work source scanners
+2. **Exit Conditions**: Register custom exit criteria
+3. **Platform Adapters**: Add new social media platforms
+4. **Analysis Modules**: Add new briefing analysis types
 
-```bash
-# Count actions by type
-jq -r '.[].action' Logs/2026-03-08.json | sort | uniq -c
+## Version History
 
-# Find failed actions
-jq '.[] | select(.result == "failure")' Logs/2026-03-08.json
-
-# Calculate average duration
-jq '[.[].duration_ms] | add / length' Logs/2026-03-08.json
-```
-
-## Deployment
-
-### Local Development
-
-```bash
-# Setup
-cp .env.example .env
-# Edit .env with your Odoo credentials
-
-# Run
-python -m agents.gold.autonomous_loop
-```
-
-### Production
-
-See `docs/deployment-gold.md` for production deployment guide.
-
-## Related Documentation
-
-- [Architecture Overview](architecture.md)
-- [API Reference](api-reference.md)
-- [Security Guide](security.md)
-- [Development Guide](development.md)
-- [Deployment Guide](deployment-gold.md)
+- **v0.1.0**: Initial Gold Tier implementation
+- Core loop, safety gate, audit logger
+- Odoo integration
+- Social media bridge
+- CEO briefing engine
