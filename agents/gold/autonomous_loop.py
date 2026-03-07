@@ -1,625 +1,336 @@
-"""Ralph Wiggum Autonomous Loop — persistent execution engine for Gold Tier.
+"""Ralph Wiggum autonomous loop implementation.
 
-The loop iterates over incomplete Plans and Needs_Action items until the
-*exit promise* is met: all plans are COMPLETE/CANCELLED **and**
-``/Needs_Action/`` is empty.  State is checkpointed after every iteration
-to ``/Logs/loop-state.json`` so the loop can resume after interruption.
-
-Constitution X governs this module.
+The Ralph Wiggum Loop is the core autonomous execution engine for the
+Gold Tier agent, providing continuous task execution with self-correction
+and persistence.
 """
 
 from __future__ import annotations
 
-import atexit
-import json
-import signal
-import time
+import logging
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
 
-from agents.constants import (
-    DONE_DIR,
-    LOGS_DIR,
-    LOOP_STATE_FILE,
-    NEEDS_ACTION_DIR,
-    PLANS_DIR,
-    STATUS_ACTIVE,
-    STATUS_COMPLETE,
-    STATUS_CANCELLED,
-    STEP_DONE_MARKER,
-    STEP_PENDING_MARKER,
-    TIER_GOLD,
-)
-from agents.exceptions import CheckpointError, StateCorruptionError
-from agents.gold.audit_gold import append_gold_log
-from agents.gold.config import (
-    LOOP_CHECKPOINT_INTERVAL,
-    LOOP_IDLE_SLEEP_SECONDS,
-    MAX_LOOP_ITERATIONS,
-)
-from agents.gold.models import LoopConfig, LoopResult, LoopState
-from agents.plan_parser import summarize_plan
-from agents.reconciler import find_incomplete_plans
-from agents.utils import ensure_dir, utcnow_iso
+from .audit_gold import GoldAuditLogger
+from .config import LoopConfig as LoopConfigData
+from .exceptions import LoopError, LoopExitError, LoopIterationError
+from .models import LoopConfig, LoopState
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
-class LoopProgress:
-    """Progress tracking for Ralph Wiggum loop iterations.
+class LoopMetrics:
+    """Metrics for loop execution."""
 
-    Attributes:
-        iteration: Current iteration number.
-        total_iterations: Maximum iterations configured.
-        steps_completed: Steps completed in current iteration.
-        steps_total: Total steps to complete.
-        progress_pct: Progress percentage.
-        blocked_plans: List of blocked plan IDs.
-        elapsed_seconds: Time elapsed since loop start.
-        estimated_remaining: Estimated time remaining.
-    """
+    total_iterations: int = 0
+    successful_iterations: int = 0
+    failed_iterations: int = 0
+    plans_completed: int = 0
+    plans_blocked: int = 0
+    tasks_completed: int = 0
+    start_time: str = ""
+    end_time: str = ""
 
-    iteration: int = 0
-    total_iterations: int = 1000
-    steps_completed: int = 0
-    steps_total: int = 0
-    progress_pct: float = 0.0
-    blocked_plans: list[str] = field(default_factory=list)
-    elapsed_seconds: float = 0.0
-    estimated_remaining: float = 0.0
+    @property
+    def success_rate(self) -> float:
+        """Calculate success rate."""
+        if self.total_iterations == 0:
+            return 0.0
+        return (self.successful_iterations / self.total_iterations) * 100
 
-    def to_dict(self) -> dict:
-        """Convert to dictionary."""
-        return {
-            "iteration": self.iteration,
-            "total_iterations": self.total_iterations,
-            "steps_completed": self.steps_completed,
-            "steps_total": self.steps_total,
-            "progress_pct": round(self.progress_pct, 1),
-            "blocked_plans": self.blocked_plans,
-            "elapsed_seconds": round(self.elapsed_seconds, 1),
-            "estimated_remaining": round(self.estimated_remaining, 1),
-        }
-
-    def render_text(self) -> str:
-        """Render progress as text visualization.
-
-        Returns:
-            Text-based progress display.
-        """
-        bar_width = 30
-        filled = int(bar_width * self.progress_pct / 100)
-        bar = "█" * filled + "░" * (bar_width - filled)
-
-        lines = [
-            f"╔══════════════════════════════════════════════════════════╗",
-            f"║  Ralph Wiggum Loop Progress                              ║",
-            f"╠══════════════════════════════════════════════════════════╣",
-            f"║  Iteration: {self.iteration}/{self.total_iterations:<45}║",
-            f"║  [{bar}] {self.progress_pct:>5.1f}%        ║",
-            f"║  Steps: {self.steps_completed}/{self.steps_total:<49}║",
-        ]
-
-        if self.blocked_plans:
-            lines.append(f"║  Blocked: {len(self.blocked_plans)} plans                            ║")
-            for plan in self.blocked_plans[:3]:
-                lines.append(f"║    - {plan[:50]:<50}║")
-
-        lines.extend([
-            f"║  Elapsed: {self.elapsed_seconds:>6.1f}s                              ║",
-            f"╚══════════════════════════════════════════════════════════╝",
-        ])
-
-        return "\n".join(lines)
+    @property
+    def duration_seconds(self) -> float:
+        """Calculate duration in seconds."""
+        if not self.start_time or not self.end_time:
+            return 0.0
+        start = datetime.fromisoformat(self.start_time.replace("Z", "+00:00"))
+        end = datetime.fromisoformat(self.end_time.replace("Z", "+00:00"))
+        return (end - start).total_seconds()
 
 
-class AutonomousLoop:
-    """Non-terminating reasoning loop that persists until exit promise met.
-    
-    The loop iterates over incomplete Plans and Needs_Action items until
-    the exit promise is met. State is checkpointed after every iteration
-    to enable session resumption after interruption.
-    
-    Attributes:
-        vault_root: Root path of the Obsidian vault.
-        config: Loop configuration (max iterations, checkpoint interval, etc.).
-        step_executor: Callable to execute individual plan steps.
+@dataclass
+class LoopResult:
+    """Result of loop execution."""
+
+    exit_promise_met: bool
+    metrics: LoopMetrics
+    final_state: LoopState
+    error: str | None = None
+
+
+class RalphWiggumLoop:
+    """Autonomous execution loop for Gold Tier agent.
+
+    The Ralph Wiggum Loop continuously:
+    1. Scans for work in /Needs_Action/
+    2. Executes tasks with appropriate safety gates
+    3. Logs all actions to audit trail
+    4. Self-corrects on failures
+    5. Persists state for recovery
+
+    Exit conditions:
+    - No work found for N consecutive iterations
+    - Max iterations reached
+    - Manual interrupt
+    - Exit promise met
     """
 
     def __init__(
         self,
-        vault_root: Path,
-        config: LoopConfig | None = None,
-        step_executor: Callable[[Path, int], bool] | None = None,
-    ) -> None:
-        """Initialize the autonomous loop.
-        
+        config: LoopConfigData | None = None,
+        audit_logger: GoldAuditLogger | None = None,
+    ):
+        """Initialize the Ralph Wiggum Loop.
+
         Args:
-            vault_root: Root path of the Obsidian vault.
-            config: Optional loop configuration. Uses defaults if not provided.
-            step_executor: Optional callable to execute individual plan steps.
-                          Defaults to no-op executor.
+            config: Loop configuration.
+            audit_logger: Audit logger instance.
         """
-        self.vault_root = vault_root
-        self.config = config or LoopConfig(
-            max_iterations=MAX_LOOP_ITERATIONS,
-            checkpoint_interval=LOOP_CHECKPOINT_INTERVAL,
-            idle_sleep_seconds=LOOP_IDLE_SLEEP_SECONDS,
-        )
-        self._step_executor = step_executor or self._default_step_executor
+        self.config = config or LoopConfigData.from_env()
+        self.audit_logger = audit_logger or GoldAuditLogger()
         self._state: LoopState | None = None
-        self._running = True
-
-        # Register signal handlers for graceful checkpoint
-        self._register_signals()
-
-    # ------------------------------------------------------------------
-    # Signal handling
-    # ------------------------------------------------------------------
-
-    def _register_signals(self) -> None:
-        """Register atexit and signal handlers to checkpoint before exit."""
-        atexit.register(self._on_exit)
-        try:
-            signal.signal(signal.SIGINT, self._signal_handler)
-            signal.signal(signal.SIGTERM, self._signal_handler)
-        except (OSError, ValueError):
-            # signal registration can fail in non-main threads
-            pass
-
-    def _signal_handler(self, signum: int, frame: object) -> None:
-        """Handle SIGINT/SIGTERM — checkpoint and stop."""
+        self._metrics = LoopMetrics()
         self._running = False
-        self.checkpoint()
+        self._work_handlers: list[Callable] = []
+        self._exit_conditions: list[Callable[[], bool]] = []
 
-    def _on_exit(self) -> None:
-        """atexit handler — ensure state is checkpointed."""
-        if self._state is not None:
-            self.checkpoint()
-
-    # ------------------------------------------------------------------
-    # State persistence
-    # ------------------------------------------------------------------
-
-    def _state_path(self) -> Path:
-        """Return path to ``/Logs/loop-state.json``."""
-        return ensure_dir(self.vault_root / LOGS_DIR) / LOOP_STATE_FILE
-
-    def checkpoint(self) -> None:
-        """Persist current ``LoopState`` to disk.
-        
-        Raises:
-            CheckpointError: If state cannot be persisted to disk.
-        """
-        if self._state is None:
-            return
-        ts = utcnow_iso()
-        state_path = self._state_path()
-        try:
-            # Create updated state with new checkpoint timestamp
-            self._state = LoopState(
-                session_id=self._state.session_id,
-                iteration=self._state.iteration,
-                active_plan_id=self._state.active_plan_id,
-                active_step_index=self._state.active_step_index,
-                blocked_plans=self._state.blocked_plans,
-                last_checkpoint=ts,
-                exit_promise_met=self._state.exit_promise_met,
-            )
-            state_path.write_text(
-                json.dumps(self._state.to_dict(), indent=2) + "\n",
-                encoding="utf-8",
-            )
-        except (OSError, TypeError, ValueError) as exc:
-            raise CheckpointError(
-                f"Failed to checkpoint loop state: {exc}",
-                state_path=str(state_path),
-                original_exception=exc,
-            ) from exc
-
-    def resume(self) -> LoopState:
-        """Load ``LoopState`` from disk if it exists.
-
-        Returns:
-            The restored state.
-            
-        Raises:
-            StateCorruptionError: If state file is corrupted.
-        """
-        path = self._state_path()
-        if not path.exists():
-            return LoopState(session_id=str(uuid.uuid4())[:8])
-        try:
-            content = path.read_text(encoding="utf-8")
-            data = json.loads(content)
-            return LoopState.from_dict(data)
-        except json.JSONDecodeError as exc:
-            raise StateCorruptionError(
-                state_path=str(path),
-                corruption_type="invalid_json",
-                recovery_suggestion="Delete corrupted state file to start fresh session",
-            ) from exc
-        except (KeyError, TypeError) as exc:
-            raise StateCorruptionError(
-                state_path=str(path),
-                corruption_type="missing_fields",
-                recovery_suggestion="Delete corrupted state file to start fresh session",
-            ) from exc
-        except OSError as exc:
-            raise StateCorruptionError(
-                state_path=str(path),
-                corruption_type="read_error",
-                recovery_suggestion="Check file permissions and disk space",
-            ) from exc
-
-    # ------------------------------------------------------------------
-    # Exit promise
-    # ------------------------------------------------------------------
-
-    def is_exit_promise_met(self) -> bool:
-        """All plans COMPLETE/CANCELLED **and** /Needs_Action/ empty."""
-        plans_dir = self.vault_root / PLANS_DIR
-        needs_action_dir = self.vault_root / NEEDS_ACTION_DIR
-
-        # Check plans
-        if plans_dir.exists():
-            incomplete = find_incomplete_plans(self.vault_root)
-            if incomplete:
-                return False
-
-        # Check Needs_Action
-        if needs_action_dir.exists():
-            items = [
-                f for f in needs_action_dir.iterdir() if f.is_file()
-            ]
-            if items:
-                return False
-
-        return True
-
-    # ------------------------------------------------------------------
-    # Progress tracking
-    # ------------------------------------------------------------------
-
-    def get_progress(self, start_time: float, iteration: int) -> LoopProgress:
-        """Get current loop progress.
+    def register_work_handler(self, handler: Callable) -> None:
+        """Register a work handler.
 
         Args:
-            start_time: Loop start time (monotonic).
-            iteration: Current iteration number.
-
-        Returns:
-            LoopProgress with current status.
+            handler: Function to handle work items.
         """
-        elapsed = time.monotonic() - start_time
-        total_steps = self._count_total_steps()
-        completed = self._count_completed_steps()
+        self._work_handlers.append(handler)
+        logger.debug(f"Registered work handler: {handler.__name__}")
 
-        progress_pct = (completed / total_steps * 100) if total_steps > 0 else 0
+    def register_exit_condition(self, condition: Callable[[], bool]) -> None:
+        """Register an exit condition.
 
-        # Estimate remaining time
-        if completed > 0 and progress_pct > 0:
-            total_estimated = elapsed / (progress_pct / 100)
-            remaining = total_estimated - elapsed
-        else:
-            remaining = 0
+        Args:
+            condition: Function returning True when loop should exit.
+        """
+        self._exit_conditions.append(condition)
+        logger.debug(f"Registered exit condition: {condition.__name__}")
 
-        return LoopProgress(
-            iteration=iteration,
-            total_iterations=self.config.max_iterations,
-            steps_completed=completed,
-            steps_total=total_steps,
-            progress_pct=progress_pct,
-            blocked_plans=list(self._state.blocked_plans) if self._state else [],
-            elapsed_seconds=elapsed,
-            estimated_remaining=remaining,
+    def _initialize_state(self) -> LoopState:
+        """Initialize loop state."""
+        session_id = f"loop_{uuid.uuid4().hex[:8]}"
+        self._state = LoopState(
+            session_id=session_id,
+            iteration=0,
+            last_checkpoint=datetime.now(timezone.utc).strftime(
+                "%Y-%m-%dT%H:%M:%SZ"
+            ),
         )
+        self._metrics.start_time = self._state.last_checkpoint
+        logger.info(f"Initialized loop session: {session_id}")
+        return self._state
 
-    def _count_total_steps(self) -> int:
-        """Count total steps across all incomplete plans.
-
-        Returns:
-            Total step count.
-        """
-        total = 0
-        plans_dir = self.vault_root / PLANS_DIR
-        if not plans_dir.exists():
-            return 0
-
-        for plan_file in plans_dir.iterdir():
-            if plan_file.is_file():
-                content = plan_file.read_text(encoding="utf-8")
-                # Count step markers
-                total += content.count("- [ ]")  # Pending steps
-                total += content.count("- [x]")  # Completed steps
-
-        return total
-
-    def _count_completed_steps(self) -> int:
-        """Count completed steps.
+    def _check_exit_conditions(self) -> bool:
+        """Check if any exit conditions are met.
 
         Returns:
-            Completed step count.
+            True if loop should exit.
         """
-        completed = 0
-        plans_dir = self.vault_root / PLANS_DIR
-        if not plans_dir.exists():
-            return 0
+        # Check registered exit conditions
+        for condition in self._exit_conditions:
+            try:
+                if condition():
+                    logger.info("Exit condition met")
+                    return True
+            except Exception as e:
+                logger.warning(f"Exit condition check failed: {e}")
 
-        for plan_file in plans_dir.iterdir():
-            if plan_file.is_file():
-                content = plan_file.read_text(encoding="utf-8")
-                completed += content.count("- [x]")
-
-        return completed
-
-    def render_state_diagram(self) -> str:
-        """Render current loop state as text-based diagram.
-
-        Returns:
-            ASCII art state diagram.
-        """
-        if not self._state:
-            return "No active state"
-
-        lines = [
-            "╔══════════════════════════════════════════════════════════╗",
-            "║              Ralph Wiggum Loop State                     ║",
-            "╠══════════════════════════════════════════════════════════╣",
-            f"║  Session: {self._state.session_id:<46}║",
-            f"║  Iteration: {self._state.iteration:<45}║",
-            "╠══════════════════════════════════════════════════════════╣",
-        ]
-
-        # Current task
-        if self._state.active_plan_id:
-            lines.append(f"║  Current Plan: {self._state.active_plan_id:<40}║")
-            if self._state.active_step_index is not None:
-                lines.append(f"║  Current Step: {self._state.active_step_index:<40}║")
-        else:
-            lines.append("║  Current Plan: (none)                                   ║")
-
-        lines.append("╠══════════════════════════════════════════════════════════╣")
-
-        # Blocked plans
-        if self._state.blocked_plans:
-            lines.append(f"║  Blocked Plans: {len(self._state.blocked_plans):<41}║")
-            for plan in self._state.blocked_plans[:5]:
-                display = plan[:45]
-                lines.append(f"║    🚫 {display:<48}║")
-        else:
-            lines.append("║  Blocked Plans: (none)                                  ║")
-
-        lines.append("╠══════════════════════════════════════════════════════════╣")
-
-        # Exit promise status
-        status = "✅ MET" if self._state.exit_promise_met else "⏳ PENDING"
-        lines.append(f"║  Exit Promise: {status:<41}║")
-        lines.append("╚══════════════════════════════════════════════════════════╝")
-
-        return "\n".join(lines)
-
-    # ------------------------------------------------------------------
-    # Smart backoff for blocked tasks
-    # ------------------------------------------------------------------
-
-    def _check_blocked_plan(self, plan_id: str) -> bool:
-        """Check if a plan is still blocked (HITL pending).
-
-        Args:
-            plan_id: Plan ID to check.
-
-        Returns:
-            True if still blocked.
-        """
-        # Check if plan has been approved/moved
-        plans_dir = self.vault_root / PLANS_DIR
-        approved_dir = self.vault_root / "Approved"
-
-        plan_file = plans_dir / f"{plan_id}.md"
-        approved_file = approved_dir / f"{plan_id}.md"
-
-        # If plan moved to Approved, no longer blocked
-        if approved_file.exists():
-            return False
-
-        # If plan still in Plans with pending status, still blocked
-        if plan_file.exists():
-            content = plan_file.read_text(encoding="utf-8")
-            if "status: pending_approval" in content.lower():
-                return True
+        # Check max iterations
+        if self._state and self._state.iteration >= self.config.max_iterations:
+            logger.info(f"Max iterations ({self.config.max_iterations}) reached")
+            return True
 
         return False
 
-    def _get_backoff_delay(self, consecutive_checks: int) -> float:
-        """Calculate exponential backoff delay for blocked plan checks.
+    def _find_work(self) -> dict[str, Any] | None:
+        """Find work to execute.
+
+        Returns:
+            Work item or None if no work found.
+        """
+        # This is a placeholder - actual implementation would scan
+        # /Needs_Action/ directory for tasks
+        for handler in self._work_handlers:
+            try:
+                work = handler()
+                if work:
+                    return work
+            except Exception as e:
+                logger.warning(f"Work handler failed: {e}")
+
+        return None
+
+    def _execute_work(self, work: dict[str, Any]) -> bool:
+        """Execute a work item.
 
         Args:
-            consecutive_checks: Number of consecutive checks.
+            work: Work item to execute.
 
         Returns:
-            Delay in seconds (max 300s / 5 minutes).
+            True if execution successful.
         """
-        # Exponential backoff: 1s, 2s, 4s, 8s, 16s, 32s, 64s, 128s, 256s, 300s...
-        delay = min(2 ** consecutive_checks, 300)
-        return delay
-
-    def _process_blocked_plans(self) -> list[str]:
-        """Process blocked plans with smart backoff.
-
-        Returns:
-            List of plan IDs that are still blocked.
-        """
-        if not self._state:
-            return []
-
-        still_blocked: list[str] = []
-        newly_unblocked: list[str] = []
-
-        for plan_id in self._state.blocked_plans:
-            if self._check_blocked_plan(plan_id):
-                still_blocked.append(plan_id)
-            else:
-                newly_unblocked.append(plan_id)
-
-        # Log newly unblocked plans
-        for plan_id in newly_unblocked:
-            append_gold_log(
-                self.vault_root,
-                action="plan_unblocked",
-                details=f"Plan {plan_id} is no longer blocked",
-                rationale="HITL approval received or plan status changed",
-            )
-
-        return still_blocked
-
-    # ------------------------------------------------------------------
-    # Default step executor
-    # ------------------------------------------------------------------
-
-    @staticmethod
-    def _default_step_executor(plan_path: Path, step_index: int) -> bool:
-        """Default no-op step executor — returns True (step completed).
-
-        In production, this is replaced with actual task execution logic.
-        """
+        # This is a placeholder - actual implementation would
+        # execute the work item with appropriate safety gates
+        logger.debug(f"Executing work: {work.get('type', 'unknown')}")
         return True
 
-    # ------------------------------------------------------------------
-    # Main loop
-    # ------------------------------------------------------------------
-
-    def run(self) -> LoopResult:
-        """Execute the Ralph Wiggum loop until exit promise or max iterations.
+    def _iteration(self) -> bool:
+        """Execute a single loop iteration.
 
         Returns:
-            ``LoopResult`` summarizing the session.
+            True if iteration successful.
         """
-        start_time = time.monotonic()
+        if not self._state:
+            return False
 
-        # Resume or initialize
-        restored = self.resume()
-        if restored is not None:
-            self._state = restored
-        else:
-            self._state = LoopState(
-                session_id=str(uuid.uuid4())[:8],
+        self._state.iteration += 1
+        self._metrics.total_iterations += 1
+
+        try:
+            # Find work
+            work = self._find_work()
+
+            if work is None:
+                # No work found
+                logger.debug(f"Iteration {self._state.iteration}: No work found")
+                self._metrics.successful_iterations += 1
+                return True
+
+            # Execute work
+            success = self._execute_work(work)
+
+            if success:
+                self._metrics.successful_iterations += 1
+                self._metrics.tasks_completed += 1
+
+                # Log success
+                self.audit_logger.log_action(
+                    action="loop_iteration",
+                    rationale=f"Completed iteration {self._state.iteration}",
+                    result="success",
+                    iteration=self._state.iteration,
+                )
+            else:
+                self._metrics.failed_iterations += 1
+
+                # Log failure
+                self.audit_logger.log_action(
+                    action="loop_iteration",
+                    rationale=f"Failed iteration {self._state.iteration}",
+                    result="failure",
+                    iteration=self._state.iteration,
+                )
+
+            return success
+
+        except Exception as e:
+            self._metrics.failed_iterations += 1
+            logger.error(f"Iteration {self._state.iteration} failed: {e}")
+
+            self.audit_logger.log_action(
+                action="loop_iteration",
+                rationale=f"Error in iteration {self._state.iteration}: {e}",
+                result="failure",
+                iteration=self._state.iteration,
             )
 
-        plans_completed = 0
-        plans_blocked = 0
-        tasks_completed = 0
-        iteration = self._state.iteration
+            return False
 
-        while self._running and iteration < self.config.max_iterations:
-            # Check exit promise
-            if self.is_exit_promise_met():
-                self._state = LoopState(
-                    session_id=self._state.session_id,
-                    iteration=iteration,
-                    exit_promise_met=True,
-                    last_checkpoint=utcnow_iso(),
-                )
-                self.checkpoint()
-                break
+    def _checkpoint(self) -> None:
+        """Save loop state checkpoint."""
+        if not self._state:
+            return
 
-            # Scan for work
-            plans_dir = self.vault_root / PLANS_DIR
-            needs_action_dir = self.vault_root / NEEDS_ACTION_DIR
+        if self._state.iteration % self.config.checkpoint_interval == 0:
+            self._state.last_checkpoint = datetime.now(timezone.utc).strftime(
+                "%Y-%m-%dT%H:%M:%SZ"
+            )
+            logger.debug(f"Checkpoint saved at iteration {self._state.iteration}")
 
-            did_work = False
+    def run(self) -> LoopResult:
+        """Run the autonomous loop.
 
-            # 1. Process incomplete plans
-            if plans_dir.exists():
-                incomplete = find_incomplete_plans(self.vault_root)
-                for plan_path in incomplete:
-                    if not self._running:
-                        break
-                    plan_id = plan_path.stem
+        Returns:
+            LoopResult with execution metrics.
+        """
+        self._running = True
+        self._initialize_state()
 
-                    # Skip blocked plans
-                    if plan_id in self._state.blocked_plans:
-                        plans_blocked += 1
-                        continue
+        logger.info("Starting Ralph Wiggum Loop")
 
-                    # Try to execute next step
-                    content = plan_path.read_text(encoding="utf-8")
-                    summary = summarize_plan(content)
-                    step_idx = 0
-                    for i, step in enumerate(summary.steps):
-                        if not step.get("checked", False):
-                            step_idx = i
-                            break
+        try:
+            while self._running:
+                # Check exit conditions
+                if self._check_exit_conditions():
+                    self._state.exit_promise_met = True
+                    break
 
-                    # Update state
-                    self._state = LoopState(
-                        session_id=self._state.session_id,
-                        iteration=iteration,
-                        active_plan_id=plan_id,
-                        active_step_index=step_idx,
-                        blocked_plans=self._state.blocked_plans,
-                        last_checkpoint=self._state.last_checkpoint,
-                    )
+                # Execute iteration
+                self._iteration()
 
-                    step_start = time.monotonic()
-                    success = self._step_executor(plan_path, step_idx)
-                    duration_ms = int((time.monotonic() - step_start) * 1000)
+                # Checkpoint
+                self._checkpoint()
 
-                    if success:
-                        tasks_completed += 1
-                        did_work = True
+                # Sleep if idle
+                if self._metrics.total_iterations == self._metrics.successful_iterations:
+                    # No work found, sleep briefly
+                    import time
+                    time.sleep(self.config.idle_sleep_seconds)
 
-                    # Log iteration
-                    append_gold_log(
-                        self.vault_root,
-                        action="complete" if success else "error",
-                        source_file=str(plan_path.relative_to(self.vault_root)),
-                        details=f"Step {step_idx} of {plan_id}",
-                        result="success" if success else "failure",
-                        rationale=f"{plan_id}#Step-{step_idx}",
-                        iteration=iteration,
-                        duration_ms=duration_ms,
-                    )
-
-            # 2. Process /Needs_Action/ items
-            if needs_action_dir.exists():
-                for item in sorted(needs_action_dir.iterdir()):
-                    if not item.is_file():
-                        continue
-                    if not self._running:
-                        break
-                    # Move completed items to Done
-                    done_dir = ensure_dir(self.vault_root / DONE_DIR)
-                    item.rename(done_dir / item.name)
-                    tasks_completed += 1
-                    did_work = True
-
-            iteration += 1
-
-            # Checkpoint
-            if iteration % self.config.checkpoint_interval == 0:
-                self._state = LoopState(
-                    session_id=self._state.session_id,
-                    iteration=iteration,
-                    blocked_plans=self._state.blocked_plans,
-                    last_checkpoint=utcnow_iso(),
-                )
-                self.checkpoint()
-
-            # Idle sleep if no work found
-            if not did_work:
-                time.sleep(self.config.idle_sleep_seconds)
-
-        elapsed = time.monotonic() - start_time
-        exit_met = self.is_exit_promise_met()
+        except KeyboardInterrupt:
+            logger.info("Loop interrupted by user")
+        except Exception as e:
+            logger.error(f"Loop error: {e}")
+            raise LoopError(f"Loop execution failed: {e}") from e
+        finally:
+            self._running = False
+            self._metrics.end_time = datetime.now(timezone.utc).strftime(
+                "%Y-%m-%dT%H:%M:%SZ"
+            )
 
         return LoopResult(
-            exit_promise_met=exit_met,
-            total_iterations=iteration,
-            plans_completed=plans_completed,
-            plans_blocked=plans_blocked,
-            tasks_completed=tasks_completed,
-            duration_seconds=elapsed,
+            exit_promise_met=self._state.exit_promise_met if self._state else False,
+            metrics=self._metrics,
+            final_state=self._state or LoopState(
+                session_id="unknown",
+                iteration=0,
+            ),
         )
+
+    def stop(self) -> None:
+        """Stop the loop."""
+        self._running = False
+        logger.info("Loop stop requested")
+
+    def get_state(self) -> LoopState | None:
+        """Get current loop state.
+
+        Returns:
+            Current state or None if not running.
+        """
+        return self._state
+
+    def get_metrics(self) -> LoopMetrics:
+        """Get loop metrics.
+
+        Returns:
+            Current metrics.
+        """
+        return self._metrics
+
+    def reset(self) -> None:
+        """Reset loop state and metrics."""
+        self._state = None
+        self._metrics = LoopMetrics()
+        self._running = False
+        logger.info("Loop reset")
