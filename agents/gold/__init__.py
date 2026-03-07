@@ -10,6 +10,24 @@ This package provides the Gold Tier autonomous agent capabilities including:
 __version__ = "0.1.0"
 __author__ = "muhammadhamza718"
 
+from .exceptions import (
+    AuditError,
+    BriefingError,
+    CircuitBreakerOpenError,
+    GoldTierError,
+    HITLTimeoutError,
+    LoopError,
+    MaxRetriesExceededError,
+    OdooAuthenticationError,
+    OdooConnectionError,
+    OdooIntegrationError,
+    OdooOperationError,
+    ResilienceError,
+    SafetyGateError,
+    SocialDraftError,
+    SocialMediaError,
+    SocialPublishError,
+)
 from .models import (
     GoldAuditEntry,
     LoopConfig,
@@ -21,6 +39,27 @@ from .models import (
 )
 
 __all__ = [
+    # Exceptions
+    "GoldTierError",
+    "OdooIntegrationError",
+    "OdooConnectionError",
+    "OdooAuthenticationError",
+    "OdooOperationError",
+    "SocialMediaError",
+    "SocialDraftError",
+    "SocialPublishError",
+    "BriefingError",
+    "BriefingGenerationError",
+    "LoopError",
+    "LoopExitError",
+    "LoopIterationError",
+    "ResilienceError",
+    "CircuitBreakerOpenError",
+    "MaxRetriesExceededError",
+    "SafetyGateError",
+    "HITLTimeoutError",
+    "AuditError",
+    # Models
     "GoldAuditEntry",
     "LoopConfig",
     "LoopState",
