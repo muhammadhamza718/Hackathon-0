@@ -10,10 +10,16 @@ This package provides the Gold Tier autonomous agent capabilities including:
 __version__ = "0.1.0"
 __author__ = "muhammadhamza718"
 
-from .models import GoldAuditEntry
+from .models import (
+    GoldAuditEntry,
+    LoopConfig,
+    LoopState,
+)
 
 __all__ = [
     "GoldAuditEntry",
+    "LoopConfig",
+    "LoopState",
     "__version__",
     "__author__",
 ]
