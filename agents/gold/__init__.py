@@ -14,12 +14,16 @@ from .models import (
     GoldAuditEntry,
     LoopConfig,
     LoopState,
+    OdooOperation,
+    OdooSession,
 )
 
 __all__ = [
     "GoldAuditEntry",
     "LoopConfig",
     "LoopState",
+    "OdooOperation",
+    "OdooSession",
     "__version__",
     "__author__",
 ]

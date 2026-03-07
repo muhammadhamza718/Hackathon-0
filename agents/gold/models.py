@@ -229,3 +229,95 @@ class LoopState(BaseModel):
             last_checkpoint=data.get("last_checkpoint", ""),
             exit_promise_met=data.get("exit_promise_met", False),
         )
+
+
+# ---------------------------------------------------------------------------
+# Odoo Integration
+# ---------------------------------------------------------------------------
+
+
+class OdooSession(BaseModel):
+    """Authenticated Odoo session state.
+
+    Attributes:
+        url: Odoo server URL.
+        database: Database name.
+        uid: Authenticated user ID.
+        authenticated: Whether session is authenticated.
+        last_call: ISO-8601 timestamp of last API call.
+    """
+
+    url: str
+    database: str
+    uid: int = 0
+    authenticated: bool = False
+    last_call: str | None = None
+
+    @field_validator("url", "database")
+    @classmethod
+    def validate_non_empty(cls, v: str) -> str:
+        """Validate non-empty string values."""
+        if not v or not v.strip():
+            raise ValueError("Field cannot be empty")
+        return v.strip()
+
+
+class OdooOperation(BaseModel):
+    """A pending or completed Odoo RPC call.
+
+    Attributes:
+        operation_id: Unique operation identifier.
+        model: Odoo model name (e.g., 'account.move').
+        method: RPC method (e.g., 'search_read', 'create', 'write').
+        args: Positional arguments for the RPC call.
+        kwargs: Keyword arguments for the RPC call.
+        is_write: Whether this is a write operation.
+        requires_approval: Whether HITL approval is required.
+        status: Operation status (pending, executed, failed).
+        result: Operation result (if completed).
+        error: Error message (if failed).
+    """
+
+    model_config = ConfigDict(frozen=False)
+
+    operation_id: str
+    model: str
+    method: str
+    args: tuple = ()
+    kwargs: dict = Field(default_factory=dict)
+    is_write: bool = False
+    requires_approval: bool = False
+    status: str = "pending"
+    result: Any = None
+    error: str | None = None
+
+    @field_validator("operation_id", "model", "method")
+    @classmethod
+    def validate_non_empty(cls, v: str) -> str:
+        """Validate non-empty string values."""
+        if not v or not v.strip():
+            raise ValueError("Field cannot be empty")
+        return v.strip()
+
+    @field_validator("status")
+    @classmethod
+    def validate_status(cls, v: str) -> str:
+        """Validate status is a known value."""
+        valid_statuses = {"pending", "executed", "failed", "approved"}
+        if v not in valid_statuses:
+            raise ValueError(f"Invalid status: {v}")
+        return v
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize to dict."""
+        return {
+            "operation_id": self.operation_id,
+            "model": self.model,
+            "method": self.method,
+            "args": list(self.args),
+            "kwargs": self.kwargs,
+            "is_write": self.is_write,
+            "requires_approval": self.requires_approval,
+            "status": self.status,
+            "error": self.error,
+        }
