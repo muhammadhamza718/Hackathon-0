@@ -18,6 +18,7 @@ from .config import (
     ResilienceConfig,
     SafetyConfig,
 )
+from .safety_gate import ApprovalRequest, GoldSafetyGate
 from .exceptions import (
     AuditError,
     BriefingError,
@@ -55,6 +56,9 @@ __all__ = [
     "BriefingConfig",
     "ResilienceConfig",
     "SafetyConfig",
+    # Safety
+    "GoldSafetyGate",
+    "ApprovalRequest",
     # Exceptions
     "GoldTierError",
     "OdooIntegrationError",
