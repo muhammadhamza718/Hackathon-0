@@ -50,6 +50,12 @@ from .revenue_analysis import (
     RevenuePoint,
     RevenueTrend,
 )
+from .subscription_tracker import (
+    MarketComparison,
+    Subscription,
+    SubscriptionTracker,
+    SubscriptionUsage,
+)
 from .exceptions import (
     AuditError,
     BriefingError,
@@ -122,6 +128,11 @@ __all__ = [
     "RevenuePoint",
     "RevenueTrend",
     "PeriodComparison",
+    # Subscription
+    "SubscriptionTracker",
+    "Subscription",
+    "SubscriptionUsage",
+    "MarketComparison",
     # Exceptions
     "GoldTierError",
     "OdooIntegrationError",
