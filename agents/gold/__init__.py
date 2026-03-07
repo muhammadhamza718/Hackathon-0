@@ -12,6 +12,7 @@ __author__ = "muhammadhamza718"
 
 from .audit_gold import GoldAuditLogger
 from .autonomous_loop import LoopMetrics, LoopResult, RalphWiggumLoop
+from .progress_tracker import ProgressReport, ProgressSnapshot, ProgressTracker
 from .config import (
     BriefingConfig,
     LoopConfig as LoopConfigData,
@@ -92,6 +93,9 @@ __all__ = [
     "RalphWiggumLoop",
     "LoopResult",
     "LoopMetrics",
+    "ProgressTracker",
+    "ProgressReport",
+    "ProgressSnapshot",
     # Config
     "OdooConfigData",
     "LoopConfigData",
