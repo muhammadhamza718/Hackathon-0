@@ -18,6 +18,7 @@ from .config import (
     ResilienceConfig,
     SafetyConfig,
 )
+from .odoo_rpc_client import OdooRPCClient
 from .resilient_executor import ExecutionResult, ResilientExecutor
 from .safety_gate import ApprovalRequest, GoldSafetyGate
 from .exceptions import (
@@ -57,6 +58,8 @@ __all__ = [
     "BriefingConfig",
     "ResilienceConfig",
     "SafetyConfig",
+    # Odoo
+    "OdooRPCClient",
     # Resilience
     "ResilientExecutor",
     "ExecutionResult",
