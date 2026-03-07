@@ -23,6 +23,13 @@ from .odoo_mcp_server import OdooMCPServer
 from .odoo_rpc_client import OdooRPCClient
 from .resilient_executor import ExecutionResult, ResilientExecutor
 from .safety_gate import ApprovalRequest, GoldSafetyGate
+from .social_bridge import (
+    FacebookAdapter,
+    InstagramAdapter,
+    PlatformAdapter,
+    SocialBridge,
+    XAdapter,
+)
 from .exceptions import (
     AuditError,
     BriefingError,
@@ -71,6 +78,12 @@ __all__ = [
     # Safety
     "GoldSafetyGate",
     "ApprovalRequest",
+    # Social
+    "SocialBridge",
+    "PlatformAdapter",
+    "XAdapter",
+    "FacebookAdapter",
+    "InstagramAdapter",
     # Exceptions
     "GoldTierError",
     "OdooIntegrationError",
