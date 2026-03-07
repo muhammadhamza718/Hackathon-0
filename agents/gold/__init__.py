@@ -18,6 +18,7 @@ from .config import (
     ResilienceConfig,
     SafetyConfig,
 )
+from .odoo_connection_pool import OdooConnectionPool, SessionManager
 from .odoo_mcp_server import OdooMCPServer
 from .odoo_rpc_client import OdooRPCClient
 from .resilient_executor import ExecutionResult, ResilientExecutor
@@ -62,6 +63,8 @@ __all__ = [
     # Odoo
     "OdooRPCClient",
     "OdooMCPServer",
+    "OdooConnectionPool",
+    "SessionManager",
     # Resilience
     "ResilientExecutor",
     "ExecutionResult",
