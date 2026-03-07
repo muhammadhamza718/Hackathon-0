@@ -135,3 +135,97 @@ class GoldAuditEntry(BaseModel):
             iteration=iteration,
             duration_ms=duration_ms,
         )
+
+
+# ---------------------------------------------------------------------------
+# Ralph Wiggum Loop
+# ---------------------------------------------------------------------------
+
+
+class LoopConfig(BaseModel):
+    """Configuration for the Ralph Wiggum autonomous loop.
+
+    Attributes:
+        max_iterations: Maximum iterations before forced exit.
+        checkpoint_interval: Iterations between state checkpoints.
+        idle_sleep_seconds: Seconds to sleep when no work found.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    max_iterations: int = 1000
+    checkpoint_interval: int = 1
+    idle_sleep_seconds: float = 5.0
+
+    @field_validator("max_iterations", "checkpoint_interval")
+    @classmethod
+    def validate_positive_int(cls, v: int) -> int:
+        """Validate positive integer values."""
+        if v <= 0:
+            raise ValueError("Value must be positive")
+        return v
+
+    @field_validator("idle_sleep_seconds")
+    @classmethod
+    def validate_positive_float(cls, v: float) -> float:
+        """Validate positive float values."""
+        if v < 0:
+            raise ValueError("Value must be non-negative")
+        return v
+
+
+class LoopState(BaseModel):
+    """Serializable checkpoint for the autonomous loop.
+
+    Attributes:
+        session_id: Unique session identifier.
+        iteration: Current iteration count.
+        active_plan_id: ID of currently executing plan (if any).
+        active_step_index: Index of current step in active plan.
+        blocked_plans: Tuple of blocked plan IDs.
+        last_checkpoint: ISO-8601 timestamp of last checkpoint.
+        exit_promise_met: Whether exit conditions are satisfied.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    session_id: str
+    iteration: int = 0
+    active_plan_id: str | None = None
+    active_step_index: int | None = None
+    blocked_plans: tuple[str, ...] = ()
+    last_checkpoint: str = ""
+    exit_promise_met: bool = False
+
+    @field_validator("session_id")
+    @classmethod
+    def validate_session_id(cls, v: str) -> str:
+        """Validate session ID is non-empty."""
+        if not v or not v.strip():
+            raise ValueError("Session ID cannot be empty")
+        return v.strip()
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize to dict."""
+        return {
+            "session_id": self.session_id,
+            "iteration": self.iteration,
+            "active_plan_id": self.active_plan_id,
+            "active_step_index": self.active_step_index,
+            "blocked_plans": list(self.blocked_plans),
+            "last_checkpoint": self.last_checkpoint,
+            "exit_promise_met": self.exit_promise_met,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> LoopState:
+        """Deserialize from dict."""
+        return cls(
+            session_id=data["session_id"],
+            iteration=data.get("iteration", 0),
+            active_plan_id=data.get("active_plan_id"),
+            active_step_index=data.get("active_step_index"),
+            blocked_plans=tuple(data.get("blocked_plans", [])),
+            last_checkpoint=data.get("last_checkpoint", ""),
+            exit_promise_met=data.get("exit_promise_met", False),
+        )
