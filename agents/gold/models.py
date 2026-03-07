@@ -321,3 +321,86 @@ class OdooOperation(BaseModel):
             "status": self.status,
             "error": self.error,
         }
+
+
+# ---------------------------------------------------------------------------
+# Social Media
+# ---------------------------------------------------------------------------
+
+
+class SocialDraft(BaseModel):
+    """A social media post draft per Constitution XII.
+
+    Attributes:
+        draft_id: Unique draft identifier.
+        platform: Target platform (X, Facebook, Instagram, Multi).
+        content: Post content (already adapted for platform).
+        media_paths: Paths to media files to attach.
+        scheduled: Scheduling directive (immediate or specific time).
+        rationale: Reason for creating this post.
+        approval_status: Current approval status.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    draft_id: str
+    platform: str
+    content: str
+    media_paths: tuple[str, ...] = ()
+    scheduled: str = "immediate"
+    rationale: str = ""
+    approval_status: str = "pending"
+
+    @field_validator("draft_id", "platform", "content")
+    @classmethod
+    def validate_non_empty(cls, v: str) -> str:
+        """Validate non-empty string values."""
+        if not v or not v.strip():
+            raise ValueError("Field cannot be empty")
+        return v.strip()
+
+    @field_validator("platform")
+    @classmethod
+    def validate_platform(cls, v: str) -> str:
+        """Validate platform is known."""
+        valid_platforms = {"X", "Facebook", "Instagram", "Multi"}
+        if v not in valid_platforms:
+            raise ValueError(f"Invalid platform: {v}")
+        return v
+
+    @field_validator("approval_status")
+    @classmethod
+    def validate_approval_status(cls, v: str) -> str:
+        """Validate approval status."""
+        valid_statuses = {"pending", "approved", "rejected"}
+        if v not in valid_statuses:
+            raise ValueError(f"Invalid status: {v}")
+        return v
+
+
+class PublishResult(BaseModel):
+    """Outcome of publishing an approved social post.
+
+    Attributes:
+        success: Whether publication was successful.
+        platform: Target platform.
+        published_at: ISO-8601 timestamp of publication.
+        post_url: URL to the published post (if available).
+        error: Error message (if failed).
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    success: bool
+    platform: str
+    published_at: str = ""
+    post_url: str | None = None
+    error: str | None = None
+
+    @field_validator("platform")
+    @classmethod
+    def validate_platform(cls, v: str) -> str:
+        """Validate platform is known."""
+        if not v or not v.strip():
+            raise ValueError("Platform cannot be empty")
+        return v.strip()
