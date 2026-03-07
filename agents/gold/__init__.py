@@ -43,6 +43,7 @@ from .social_automation import (
     PublishTask,
     SocialMediaAutomation,
 )
+from .briefing_engine import CEOBriefingEngine, RevenueData
 from .exceptions import (
     AuditError,
     BriefingError,
@@ -107,6 +108,9 @@ __all__ = [
     "BrowserMCPTools",
     "BrowserConfig",
     "PublishTask",
+    # Briefing
+    "CEOBriefingEngine",
+    "RevenueData",
     # Exceptions
     "GoldTierError",
     "OdooIntegrationError",
