@@ -1,114 +1,165 @@
-"""Gold Tier configuration constants.
+"""Centralized configuration for Gold Tier.
 
-Centralized configuration for all Gold Tier components.
-All values can be overridden via environment variables or runtime config.
+Provides constants and configuration management for all Gold Tier operations.
 """
 
-from __future__ import annotations
-
 import os
+from dataclasses import dataclass
 from typing import Final
 
-# ---------------------------------------------------------------------------
-# Ralph Wiggum Loop Configuration
-# ---------------------------------------------------------------------------
-
-#: Maximum iterations before forced loop exit
-MAX_LOOP_ITERATIONS: Final[int] = int(os.getenv("MAX_LOOP_ITERATIONS", "1000"))
-
-#: Iterations between state checkpoints
-LOOP_CHECKPOINT_INTERVAL: Final[int] = int(os.getenv("LOOP_CHECKPOINT_INTERVAL", "1"))
-
-#: Seconds to sleep when no work found
-LOOP_IDLE_SLEEP_SECONDS: Final[float] = float(os.getenv("LOOP_IDLE_SLEEP_SECONDS", "5.0"))
 
 # ---------------------------------------------------------------------------
-# Odoo Integration Configuration
+# Environment Variables
 # ---------------------------------------------------------------------------
 
-#: Odoo JSON-RPC request timeout in seconds
-ODOO_TIMEOUT: Final[int] = int(os.getenv("ODOO_TIMEOUT", "30"))
+ENV_PREFIX: Final[str] = "GOLD_"
 
-#: Maximum retries for transient Odoo errors
-ODOO_MAX_RETRIES: Final[int] = int(os.getenv("ODOO_MAX_RETRIES", "3"))
 
-#: Odoo session pool size (for future connection pooling)
-ODOO_POOL_SIZE: Final[int] = int(os.getenv("ODOO_POOL_SIZE", "5"))
+@dataclass(frozen=True)
+class OdooConfig:
+    """Odoo JSON-RPC connection settings."""
+
+    url: str
+    database: str
+    username: str
+    api_key: str
+
+    @classmethod
+    def from_env(cls) -> "OdooConfig":
+        """Load Odoo configuration from environment variables."""
+        return cls(
+            url=os.getenv("ODOO_URL", "http://localhost:8069"),
+            database=os.getenv("ODOO_DATABASE", "odoo"),
+            username=os.getenv("ODOO_USERNAME", "admin"),
+            api_key=os.getenv("ODOO_API_KEY", ""),
+        )
+
+
+@dataclass(frozen=True)
+class LoopConfig:
+    """Ralph Wiggum autonomous loop configuration."""
+
+    max_iterations: int = 1000
+    checkpoint_interval: int = 1
+    idle_sleep_seconds: float = 5.0
+    max_concurrent_plans: int = 5
+
+    @classmethod
+    def from_env(cls) -> "LoopConfig":
+        """Load loop configuration from environment variables."""
+        return cls(
+            max_iterations=int(os.getenv("GOLD_MAX_ITERATIONS", "1000")),
+            checkpoint_interval=int(os.getenv("GOLD_CHECKPOINT_INTERVAL", "1")),
+            idle_sleep_seconds=float(os.getenv("GOLD_IDLE_SLEEP_SECONDS", "5.0")),
+            max_concurrent_plans=int(os.getenv("GOLD_MAX_CONCURRENT_PLANS", "5")),
+        )
+
+
+@dataclass(frozen=True)
+class BriefingConfig:
+    """CEO Briefing Engine configuration."""
+
+    briefing_day: int = 0  # Monday
+    briefing_hour: int = 8  # 8 AM
+    revenue_goal: float = 10000.0
+    bottleneck_threshold_hours: float = 48.0
+
+    @classmethod
+    def from_env(cls) -> "BriefingConfig":
+        """Load briefing configuration from environment variables."""
+        return cls(
+            briefing_day=int(os.getenv("GOLD_BRIEFING_DAY", "0")),
+            briefing_hour=int(os.getenv("GOLD_BRIEFING_HOUR", "8")),
+            revenue_goal=float(os.getenv("GOLD_REVENUE_GOAL", "10000.0")),
+            bottleneck_threshold_hours=float(
+                os.getenv("GOLD_BOTTLENECK_THRESHOLD_HOURS", "48.0")
+            ),
+        )
+
+
+@dataclass(frozen=True)
+class ResilienceConfig:
+    """Resilience and retry configuration."""
+
+    max_retries: int = 3
+    base_delay_seconds: float = 1.0
+    max_delay_seconds: float = 60.0
+    exponential_base: float = 2.0
+    circuit_breaker_threshold: int = 3
+    circuit_breaker_reset_seconds: float = 30.0
+
+    @classmethod
+    def from_env(cls) -> "ResilienceConfig":
+        """Load resilience configuration from environment variables."""
+        return cls(
+            max_retries=int(os.getenv("GOLD_MAX_RETRIES", "3")),
+            base_delay_seconds=float(os.getenv("GOLD_BASE_DELAY_SECONDS", "1.0")),
+            max_delay_seconds=float(os.getenv("GOLD_MAX_DELAY_SECONDS", "60.0")),
+            exponential_base=float(os.getenv("GOLD_EXPONENTIAL_BASE", "2.0")),
+            circuit_breaker_threshold=int(
+                os.getenv("GOLD_CIRCUIT_BREAKER_THRESHOLD", "3")
+            ),
+            circuit_breaker_reset_seconds=float(
+                os.getenv("GOLD_CIRCUIT_BREAKER_RESET_SECONDS", "30.0")
+            ),
+        )
+
+
+@dataclass(frozen=True)
+class SafetyConfig:
+    """HITL safety gate configuration."""
+
+    hitl_timeout_seconds: float = 3600.0  # 1 hour
+    approval_required_actions: frozenset[str] = frozenset(
+        {
+            "odoo_write",
+            "odoo_create",
+            "odoo_delete",
+            "social_post",
+            "payment_over_100",
+        }
+    )
+
+    @classmethod
+    def from_env(cls) -> "SafetyConfig":
+        """Load safety configuration from environment variables."""
+        return cls(
+            hitl_timeout_seconds=float(
+                os.getenv("GOLD_HITL_TIMEOUT_SECONDS", "3600.0")
+            ),
+        )
+
 
 # ---------------------------------------------------------------------------
-# Social Media Configuration
+# Vault Paths (relative to project root)
 # ---------------------------------------------------------------------------
 
-#: Platform-specific content limits
-SOCIAL_PLATFORM_LIMITS: Final[dict[str, dict]] = {
-    "X": {"max_text": 280, "max_images": 4, "max_hashtags": 3},
-    "Facebook": {"max_text": 63206, "max_images": 10, "max_hashtags": 30},
-    "Instagram": {"max_text": 2200, "max_images": 10, "max_hashtags": 30},
+VAULT_INBOX: Final[str] = "Inbox"
+VAULT_NEEDS_ACTION: Final[str] = "Needs_Action"
+VAULT_PENDING_APPROVAL: Final[str] = "Pending_Approval"
+VAULT_DONE: Final[str] = "Done"
+VAULT_LOGS: Final[str] = "Logs"
+VAULT_BRIEFINGS: Final[str] = "Briefings"
+
+
+# ---------------------------------------------------------------------------
+# Platform Constants
+# ---------------------------------------------------------------------------
+
+SOCIAL_PLATFORMS: Final[frozenset[str]] = frozenset(
+    {"X", "Facebook", "Instagram", "Multi"}
+)
+
+PLATFORM_CHAR_LIMITS: Final[dict[str, int]] = {
+    "X": 280,
+    "Facebook": 63206,
+    "Instagram": 2200,
 }
 
-#: Default hashtags for different content types
-SOCIAL_DEFAULT_HASHTAGS: Final[dict[str, list[str]]] = {
-    "general": ["#Business", "#AI", "#Automation"],
-    "product": ["#Product", "#Launch", "#Innovation"],
-    "engagement": ["#Community", "#Discussion", "#Feedback"],
-}
 
 # ---------------------------------------------------------------------------
-# CEO Briefing Configuration
+# Audit Constants
 # ---------------------------------------------------------------------------
 
-#: Day of week for briefing (0=Monday, 6=Sunday)
-BRIEFING_DAY: Final[int] = int(os.getenv("BRIEFING_DAY", "6"))
-
-#: Hour for briefing generation (24h format)
-BRIEFING_HOUR: Final[int] = int(os.getenv("BRIEFING_HOUR", "22"))
-
-#: Default monthly revenue goal
-REVENUE_GOAL: Final[float] = float(os.getenv("REVENUE_GOAL", "10000.0"))
-
-#: Hours before task is considered a bottleneck
-BOTTLENECK_THRESHOLD_HOURS: Final[float] = float(
-    os.getenv("BOTTLENECK_THRESHOLD_HOURS", "48.0")
-)
-
-#: Utilization % below which subscription is flagged
-SUBSCRIPTION_UTILIZATION_THRESHOLD: Final[float] = float(
-    os.getenv("SUBSCRIPTION_UTILIZATION_THRESHOLD", "30.0")
-)
-
-# ---------------------------------------------------------------------------
-# Resilience Configuration
-# ---------------------------------------------------------------------------
-
-#: Base delay for exponential backoff (seconds)
-BACKOFF_BASE_SECONDS: Final[float] = 1.0
-
-#: Maximum backoff delay (seconds)
-BACKOFF_MAX_SECONDS: Final[float] = 60.0
-
-#: Circuit breaker failure threshold
-CIRCUIT_BREAKER_THRESHOLD: Final[int] = 3
-
-#: Maximum retries for transient errors
-MAX_RETRIES: Final[int] = 3
-
-# ---------------------------------------------------------------------------
-# HITL Configuration
-# ---------------------------------------------------------------------------
-
-#: Payment approval threshold in USD
-PAYMENT_APPROVAL_THRESHOLD: Final[float] = float(
-    os.getenv("PAYMENT_APPROVAL_THRESHOLD", "100.00")
-)
-
-# ---------------------------------------------------------------------------
-# Audit Logging Configuration
-# ---------------------------------------------------------------------------
-
-#: Include request/response sizes in audit logs
-AUDIT_LOG_PAYLOAD_SIZES: Final[bool] = os.getenv(
-    "AUDIT_LOG_PAYLOAD_SIZES", "false"
-).lower() in {"true", "1", "yes"}
-
-#: Redact sensitive fields in audit logs
-AUDIT_REDACT_SENSITIVE: Final[bool] = True
+AUDIT_LOG_FORMAT: Final[str] = "json"
+AUDIT_RETENTION_DAYS: Final[int] = 90

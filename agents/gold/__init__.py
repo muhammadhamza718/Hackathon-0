@@ -10,6 +10,13 @@ This package provides the Gold Tier autonomous agent capabilities including:
 __version__ = "0.1.0"
 __author__ = "muhammadhamza718"
 
+from .config import (
+    BriefingConfig,
+    LoopConfig as LoopConfigData,
+    OdooConfig as OdooConfigData,
+    ResilienceConfig,
+    SafetyConfig,
+)
 from .exceptions import (
     AuditError,
     BriefingError,
@@ -39,6 +46,12 @@ from .models import (
 )
 
 __all__ = [
+    # Config
+    "OdooConfigData",
+    "LoopConfigData",
+    "BriefingConfig",
+    "ResilienceConfig",
+    "SafetyConfig",
     # Exceptions
     "GoldTierError",
     "OdooIntegrationError",
