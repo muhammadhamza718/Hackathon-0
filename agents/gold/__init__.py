@@ -10,6 +10,7 @@ This package provides the Gold Tier autonomous agent capabilities including:
 __version__ = "0.1.0"
 __author__ = "muhammadhamza718"
 
+from .audit_gold import GoldAuditLogger
 from .config import (
     BriefingConfig,
     LoopConfig as LoopConfigData,
@@ -46,6 +47,8 @@ from .models import (
 )
 
 __all__ = [
+    # Audit
+    "GoldAuditLogger",
     # Config
     "OdooConfigData",
     "LoopConfigData",
