@@ -37,6 +37,12 @@ from .social_analytics import (
     PlatformMetrics,
     PostMetrics,
 )
+from .social_automation import (
+    BrowserConfig,
+    BrowserMCPTools,
+    PublishTask,
+    SocialMediaAutomation,
+)
 from .exceptions import (
     AuditError,
     BriefingError,
@@ -96,6 +102,11 @@ __all__ = [
     "AnalyticsSummary",
     "PlatformMetrics",
     "PostMetrics",
+    # Automation
+    "SocialMediaAutomation",
+    "BrowserMCPTools",
+    "BrowserConfig",
+    "PublishTask",
     # Exceptions
     "GoldTierError",
     "OdooIntegrationError",
