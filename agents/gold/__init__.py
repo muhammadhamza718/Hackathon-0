@@ -16,6 +16,8 @@ from .models import (
     LoopState,
     OdooOperation,
     OdooSession,
+    PublishResult,
+    SocialDraft,
 )
 
 __all__ = [
@@ -24,6 +26,8 @@ __all__ = [
     "LoopState",
     "OdooOperation",
     "OdooSession",
+    "PublishResult",
+    "SocialDraft",
     "__version__",
     "__author__",
 ]
