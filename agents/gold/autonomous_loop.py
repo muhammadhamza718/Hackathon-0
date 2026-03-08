@@ -15,7 +15,8 @@ import json
 import signal
 import time
 import uuid
-from datetime import datetime, timezone
+from dataclasses import dataclass, field
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Callable
 
@@ -43,6 +44,75 @@ from agents.gold.models import LoopConfig, LoopResult, LoopState
 from agents.plan_parser import summarize_plan
 from agents.reconciler import find_incomplete_plans
 from agents.utils import ensure_dir, utcnow_iso
+
+
+@dataclass
+class LoopProgress:
+    """Progress tracking for Ralph Wiggum loop iterations.
+
+    Attributes:
+        iteration: Current iteration number.
+        total_iterations: Maximum iterations configured.
+        steps_completed: Steps completed in current iteration.
+        steps_total: Total steps to complete.
+        progress_pct: Progress percentage.
+        blocked_plans: List of blocked plan IDs.
+        elapsed_seconds: Time elapsed since loop start.
+        estimated_remaining: Estimated time remaining.
+    """
+
+    iteration: int = 0
+    total_iterations: int = 1000
+    steps_completed: int = 0
+    steps_total: int = 0
+    progress_pct: float = 0.0
+    blocked_plans: list[str] = field(default_factory=list)
+    elapsed_seconds: float = 0.0
+    estimated_remaining: float = 0.0
+
+    def to_dict(self) -> dict:
+        """Convert to dictionary."""
+        return {
+            "iteration": self.iteration,
+            "total_iterations": self.total_iterations,
+            "steps_completed": self.steps_completed,
+            "steps_total": self.steps_total,
+            "progress_pct": round(self.progress_pct, 1),
+            "blocked_plans": self.blocked_plans,
+            "elapsed_seconds": round(self.elapsed_seconds, 1),
+            "estimated_remaining": round(self.estimated_remaining, 1),
+        }
+
+    def render_text(self) -> str:
+        """Render progress as text visualization.
+
+        Returns:
+            Text-based progress display.
+        """
+        bar_width = 30
+        filled = int(bar_width * self.progress_pct / 100)
+        bar = "█" * filled + "░" * (bar_width - filled)
+
+        lines = [
+            f"╔══════════════════════════════════════════════════════════╗",
+            f"║  Ralph Wiggum Loop Progress                              ║",
+            f"╠══════════════════════════════════════════════════════════╣",
+            f"║  Iteration: {self.iteration}/{self.total_iterations:<45}║",
+            f"║  [{bar}] {self.progress_pct:>5.1f}%        ║",
+            f"║  Steps: {self.steps_completed}/{self.steps_total:<49}║",
+        ]
+
+        if self.blocked_plans:
+            lines.append(f"║  Blocked: {len(self.blocked_plans)} plans                            ║")
+            for plan in self.blocked_plans[:3]:
+                lines.append(f"║    - {plan[:50]:<50}║")
+
+        lines.extend([
+            f"║  Elapsed: {self.elapsed_seconds:>6.1f}s                              ║",
+            f"╚══════════════════════════════════════════════════════════╝",
+        ])
+
+        return "\n".join(lines)
 
 
 class AutonomousLoop:
@@ -208,6 +278,202 @@ class AutonomousLoop:
                 return False
 
         return True
+
+    # ------------------------------------------------------------------
+    # Progress tracking
+    # ------------------------------------------------------------------
+
+    def get_progress(self, start_time: float, iteration: int) -> LoopProgress:
+        """Get current loop progress.
+
+        Args:
+            start_time: Loop start time (monotonic).
+            iteration: Current iteration number.
+
+        Returns:
+            LoopProgress with current status.
+        """
+        elapsed = time.monotonic() - start_time
+        total_steps = self._count_total_steps()
+        completed = self._count_completed_steps()
+
+        progress_pct = (completed / total_steps * 100) if total_steps > 0 else 0
+
+        # Estimate remaining time
+        if completed > 0 and progress_pct > 0:
+            total_estimated = elapsed / (progress_pct / 100)
+            remaining = total_estimated - elapsed
+        else:
+            remaining = 0
+
+        return LoopProgress(
+            iteration=iteration,
+            total_iterations=self.config.max_iterations,
+            steps_completed=completed,
+            steps_total=total_steps,
+            progress_pct=progress_pct,
+            blocked_plans=list(self._state.blocked_plans) if self._state else [],
+            elapsed_seconds=elapsed,
+            estimated_remaining=remaining,
+        )
+
+    def _count_total_steps(self) -> int:
+        """Count total steps across all incomplete plans.
+
+        Returns:
+            Total step count.
+        """
+        total = 0
+        plans_dir = self.vault_root / PLANS_DIR
+        if not plans_dir.exists():
+            return 0
+
+        for plan_file in plans_dir.iterdir():
+            if plan_file.is_file():
+                content = plan_file.read_text(encoding="utf-8")
+                # Count step markers
+                total += content.count("- [ ]")  # Pending steps
+                total += content.count("- [x]")  # Completed steps
+
+        return total
+
+    def _count_completed_steps(self) -> int:
+        """Count completed steps.
+
+        Returns:
+            Completed step count.
+        """
+        completed = 0
+        plans_dir = self.vault_root / PLANS_DIR
+        if not plans_dir.exists():
+            return 0
+
+        for plan_file in plans_dir.iterdir():
+            if plan_file.is_file():
+                content = plan_file.read_text(encoding="utf-8")
+                completed += content.count("- [x]")
+
+        return completed
+
+    def render_state_diagram(self) -> str:
+        """Render current loop state as text-based diagram.
+
+        Returns:
+            ASCII art state diagram.
+        """
+        if not self._state:
+            return "No active state"
+
+        lines = [
+            "╔══════════════════════════════════════════════════════════╗",
+            "║              Ralph Wiggum Loop State                     ║",
+            "╠══════════════════════════════════════════════════════════╣",
+            f"║  Session: {self._state.session_id:<46}║",
+            f"║  Iteration: {self._state.iteration:<45}║",
+            "╠══════════════════════════════════════════════════════════╣",
+        ]
+
+        # Current task
+        if self._state.active_plan_id:
+            lines.append(f"║  Current Plan: {self._state.active_plan_id:<40}║")
+            if self._state.active_step_index is not None:
+                lines.append(f"║  Current Step: {self._state.active_step_index:<40}║")
+        else:
+            lines.append("║  Current Plan: (none)                                   ║")
+
+        lines.append("╠══════════════════════════════════════════════════════════╣")
+
+        # Blocked plans
+        if self._state.blocked_plans:
+            lines.append(f"║  Blocked Plans: {len(self._state.blocked_plans):<41}║")
+            for plan in self._state.blocked_plans[:5]:
+                display = plan[:45]
+                lines.append(f"║    🚫 {display:<48}║")
+        else:
+            lines.append("║  Blocked Plans: (none)                                  ║")
+
+        lines.append("╠══════════════════════════════════════════════════════════╣")
+
+        # Exit promise status
+        status = "✅ MET" if self._state.exit_promise_met else "⏳ PENDING"
+        lines.append(f"║  Exit Promise: {status:<41}║")
+        lines.append("╚══════════════════════════════════════════════════════════╝")
+
+        return "\n".join(lines)
+
+    # ------------------------------------------------------------------
+    # Smart backoff for blocked tasks
+    # ------------------------------------------------------------------
+
+    def _check_blocked_plan(self, plan_id: str) -> bool:
+        """Check if a plan is still blocked (HITL pending).
+
+        Args:
+            plan_id: Plan ID to check.
+
+        Returns:
+            True if still blocked.
+        """
+        # Check if plan has been approved/moved
+        plans_dir = self.vault_root / PLANS_DIR
+        approved_dir = self.vault_root / "Approved"
+
+        plan_file = plans_dir / f"{plan_id}.md"
+        approved_file = approved_dir / f"{plan_id}.md"
+
+        # If plan moved to Approved, no longer blocked
+        if approved_file.exists():
+            return False
+
+        # If plan still in Plans with pending status, still blocked
+        if plan_file.exists():
+            content = plan_file.read_text(encoding="utf-8")
+            if "status: pending_approval" in content.lower():
+                return True
+
+        return False
+
+    def _get_backoff_delay(self, consecutive_checks: int) -> float:
+        """Calculate exponential backoff delay for blocked plan checks.
+
+        Args:
+            consecutive_checks: Number of consecutive checks.
+
+        Returns:
+            Delay in seconds (max 300s / 5 minutes).
+        """
+        # Exponential backoff: 1s, 2s, 4s, 8s, 16s, 32s, 64s, 128s, 256s, 300s...
+        delay = min(2 ** consecutive_checks, 300)
+        return delay
+
+    def _process_blocked_plans(self) -> list[str]:
+        """Process blocked plans with smart backoff.
+
+        Returns:
+            List of plan IDs that are still blocked.
+        """
+        if not self._state:
+            return []
+
+        still_blocked: list[str] = []
+        newly_unblocked: list[str] = []
+
+        for plan_id in self._state.blocked_plans:
+            if self._check_blocked_plan(plan_id):
+                still_blocked.append(plan_id)
+            else:
+                newly_unblocked.append(plan_id)
+
+        # Log newly unblocked plans
+        for plan_id in newly_unblocked:
+            append_gold_log(
+                self.vault_root,
+                action="plan_unblocked",
+                details=f"Plan {plan_id} is no longer blocked",
+                rationale="HITL approval received or plan status changed",
+            )
+
+        return still_blocked
 
     # ------------------------------------------------------------------
     # Default step executor
