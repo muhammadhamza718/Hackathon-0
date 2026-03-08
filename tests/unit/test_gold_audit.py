@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from agents.gold.audit_gold import append_gold_log, read_gold_log
 from agents.gold.models import GoldAuditEntry
@@ -19,8 +20,10 @@ def vault(tmp_path: Path) -> Path:
 
 class TestGoldAuditEntry:
     def test_frozen(self):
+        """Test that GoldAuditEntry is frozen (immutable)."""
         entry = GoldAuditEntry.now(action="triage", rationale="test")
-        with pytest.raises(AttributeError):
+        # Pydantic frozen models raise ValidationError on mutation
+        with pytest.raises(ValidationError):
             entry.action = "mutated"  # type: ignore[misc]
 
     def test_now_factory(self):
