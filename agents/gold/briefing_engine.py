@@ -83,7 +83,7 @@ class CEOBriefingEngine:
         return True
 
     # ------------------------------------------------------------------
-    # Revenue aggregation
+    # Revenue aggregation with trend analysis
     # ------------------------------------------------------------------
 
     def _aggregate_revenue(self) -> tuple[float | None, list[str]]:
@@ -119,6 +119,167 @@ class CEOBriefingEngine:
         except Exception as exc:
             unavailable.append(f"Revenue — Odoo unreachable: {exc}")
             return None, unavailable
+
+    def _get_revenue_trend(
+        self,
+        current_revenue: float | None,
+        previous_revenue: float | None,
+    ) -> dict:
+        """Calculate revenue trend between two periods.
+
+        Args:
+            current_revenue: Current period revenue.
+            previous_revenue: Previous period revenue.
+
+        Returns:
+            Dict with trend analysis (delta, percentage, direction).
+        """
+        if current_revenue is None or previous_revenue is None:
+            return {
+                "current": current_revenue,
+                "previous": previous_revenue,
+                "delta": None,
+                "delta_pct": None,
+                "trend": "unknown",
+                "indicator": "⚪",
+            }
+
+        delta = current_revenue - previous_revenue
+        delta_pct = (delta / previous_revenue * 100) if previous_revenue > 0 else 0
+
+        if delta_pct > 5:
+            trend = "up_strong"
+            indicator = "🟢"
+        elif delta_pct > 0:
+            trend = "up"
+            indicator = "🟡"
+        elif delta_pct > -5:
+            trend = "flat"
+            indicator = "⚪"
+        elif delta_pct > -20:
+            trend = "down"
+            indicator = "🟠"
+        else:
+            trend = "down_strong"
+            indicator = "🔴"
+
+        return {
+            "current": current_revenue,
+            "previous": previous_revenue,
+            "delta": round(delta, 2),
+            "delta_pct": round(delta_pct, 1),
+            "trend": trend,
+            "indicator": indicator,
+        }
+
+    def _fetch_historical_revenue(
+        self,
+        days_back: int,
+        end_date: datetime | None = None,
+    ) -> tuple[float | None, str]:
+        """Fetch revenue for a historical period.
+
+        Args:
+            days_back: Number of days to look back.
+            end_date: End date for period (default: now).
+
+        Returns:
+            Tuple of (revenue, period_label).
+        """
+        if self._odoo is None:
+            return None, "N/A"
+
+        if end_date is None:
+            end_date = datetime.now(timezone.utc)
+
+        start_date = end_date - timedelta(days=days_back)
+
+        try:
+            invoices = self._odoo.search_read(  # type: ignore[union-attr]
+                "account.move",
+                [
+                    ("move_type", "=", "out_invoice"),
+                    ("state", "=", "posted"),
+                    ("date", ">=", start_date.strftime("%Y-%m-%d")),
+                    ("date", "<=", end_date.strftime("%Y-%m-%d")),
+                ],
+                ["amount_total"],
+                limit=500,
+            )
+            total = sum(inv.get("amount_total", 0.0) for inv in invoices)
+            return total, f"{start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}"
+        except Exception:
+            return None, "Error fetching data"
+
+    def _analyze_revenue_trends(self) -> dict:
+        """Analyze revenue trends with comparisons.
+
+        Returns:
+            Dict with WoW, MoM comparisons and trend indicators.
+        """
+        now = datetime.now(timezone.utc)
+
+        # Current MTD
+        current_mtd, _ = self._aggregate_revenue()
+
+        # Previous MTD (same days last month)
+        last_month_same_day = now - timedelta(days=28)  # Approximate
+        prev_mtd, _ = self._fetch_historical_revenue(28, last_month_same_day)
+
+        # Previous week (7 days before today)
+        last_week = now - timedelta(days=7)
+        prev_week, _ = self._fetch_historical_revenue(7, last_week)
+
+        # Current week (last 7 days)
+        current_week, _ = self._fetch_historical_revenue(7, now)
+
+        # Calculate trends
+        mom_trend = self._get_revenue_trend(current_mtd, prev_mtd)
+        wow_trend = self._get_revenue_trend(current_week, prev_week)
+
+        return {
+            "current_mtd": current_mtd,
+            "mom_comparison": mom_trend,
+            "current_week": current_week,
+            "wow_comparison": wow_trend,
+            "summary": self._generate_revenue_summary(mom_trend, wow_trend),
+        }
+
+    def _generate_revenue_summary(
+        self,
+        mom_trend: dict,
+        wow_trend: dict,
+    ) -> str:
+        """Generate human-readable revenue summary.
+
+        Args:
+            mom_trend: Month-over-month trend dict.
+            wow_trend: Week-over-week trend dict.
+
+        Returns:
+            Human-readable summary string.
+        """
+        parts = []
+
+        # MoM summary
+        if mom_trend["trend"] == "unknown":
+            parts.append("MoM: data unavailable")
+        else:
+            indicator = mom_trend["indicator"]
+            pct = mom_trend["delta_pct"]
+            if pct is not None:
+                parts.append(f"MoM: {indicator} {pct:+.1f}%")
+
+        # WoW summary
+        if wow_trend["trend"] == "unknown":
+            parts.append("WoW: data unavailable")
+        else:
+            indicator = wow_trend["indicator"]
+            pct = wow_trend["delta_pct"]
+            if pct is not None:
+                parts.append(f"WoW: {indicator} {pct:+.1f}%")
+
+        return " | ".join(parts) if parts else "Revenue trends unavailable"
 
     # ------------------------------------------------------------------
     # Bottleneck detection
@@ -253,6 +414,7 @@ class CEOBriefingEngine:
         sunday = monday + timedelta(days=6)
 
         revenue_mtd, unavailable = self._aggregate_revenue()
+        revenue_trends = self._analyze_revenue_trends()
         bottlenecks = self._detect_bottlenecks()
         subscriptions = self._audit_subscriptions()
 
@@ -260,6 +422,10 @@ class CEOBriefingEngine:
         delta_pct = None
         if revenue_mtd is not None and revenue_goal > 0:
             delta_pct = round(((revenue_mtd - revenue_goal) / revenue_goal) * 100, 1)
+
+        # Add trend summary to unavailable if data missing
+        if revenue_trends["summary"].startswith("MoM: data unavailable"):
+            unavailable.append("Revenue trends — insufficient historical data")
 
         briefing = CEOBriefing(
             briefing_id=f"BRIEFING-{iso_year}-W{iso_week:02d}",
@@ -277,11 +443,82 @@ class CEOBriefingEngine:
         append_gold_log(
             self.vault_root,
             action="ceo_briefing",
-            details=f"Generated briefing {briefing.briefing_id}",
+            details=f"Generated briefing {briefing.briefing_id} with trend analysis",
             rationale="Scheduled weekly CEO briefing (Constitution XIII)",
         )
 
         return briefing
+
+    def generate_briefing_with_trends(self) -> str:
+        """Generate full briefing markdown with revenue trend analysis.
+
+        Returns:
+            Markdown-formatted briefing with trend indicators.
+        """
+        briefing = self.generate_briefing()
+        trends = self._analyze_revenue_trends()
+
+        lines = [
+            f"# {briefing.briefing_id} — CEO Weekly Briefing",
+            "",
+            f"**Generated**: {briefing.generated_at}",
+            f"**Period**: {briefing.period_start} to {briefing.period_end}",
+            "",
+            "## Executive Summary",
+            "",
+            "### Revenue",
+            "",
+        ]
+
+        # Revenue section with trends
+        if briefing.revenue_mtd is not None:
+            lines.append(f"- **MTD Revenue**: ${briefing.revenue_mtd:,.2f}")
+            if briefing.revenue_delta_pct is not None:
+                sign = "+" if briefing.revenue_delta_pct >= 0 else ""
+                lines.append(f"- **vs Goal**: {sign}{briefing.revenue_delta_pct}% (${briefing.revenue_goal:,.2f})")
+        else:
+            lines.append("- **Revenue**: Data unavailable")
+
+        lines.append("")
+        lines.append("### Revenue Trends")
+        lines.append("")
+        lines.append(f"- **Month-over-Month**: {trends['mom_comparison']['indicator']} {trends['mom_comparison'].get('delta_pct', 'N/A')!s}%")
+        lines.append(f"- **Week-over-Week**: {trends['wow_comparison']['indicator']} {trends['wow_comparison'].get('delta_pct', 'N/A')!s}%")
+        lines.append(f"- **Summary**: {trends['summary']}")
+        lines.append("")
+
+        # Bottlenecks
+        lines.append("### Task Bottlenecks")
+        lines.append("")
+        if briefing.bottleneck_tasks:
+            for task in briefing.bottleneck_tasks[:5]:
+                lines.append(f"- **[{task.priority}]** {task.filename} ({task.age_hours:.1f}h old): {task.summary}")
+        else:
+            lines.append("No bottlenecks detected.")
+        lines.append("")
+
+        # Subscription findings
+        lines.append("### Subscription Optimizations")
+        lines.append("")
+        if briefing.subscription_findings:
+            total_savings = sum(f.potential_savings for f in briefing.subscription_findings)
+            lines.append(f"**Potential Monthly Savings**: ${total_savings:,.2f}")
+            lines.append("")
+            for finding in briefing.subscription_findings:
+                lines.append(f"- **{finding.service_name}** (${finding.monthly_cost}/mo): {finding.recommendation}")
+        else:
+            lines.append("No optimization opportunities found.")
+        lines.append("")
+
+        # Data availability
+        if briefing.data_unavailable:
+            lines.append("### Data Unavailable")
+            lines.append("")
+            for item in briefing.data_unavailable:
+                lines.append(f"- {item}")
+            lines.append("")
+
+        return "\n".join(lines)
 
     # ------------------------------------------------------------------
     # Write to vault
