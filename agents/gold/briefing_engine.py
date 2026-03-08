@@ -28,7 +28,11 @@ from agents.utils import ensure_dir, safe_read, utcnow_iso
 
 
 class CEOBriefingEngine:
-    """Weekly CEO briefing generator."""
+    """Weekly CEO briefing generator.
+
+    Supports dependency injection for Odoo client and data providers,
+    enabling easier testing and custom data sources.
+    """
 
     def __init__(
         self,
@@ -36,6 +40,15 @@ class CEOBriefingEngine:
         config: BriefingConfig | None = None,
         odoo_client: object | None = None,
     ) -> None:
+        """Initialize CEO Briefing Engine.
+
+        Args:
+            vault_root: Root path of the vault.
+            config: Optional briefing configuration.
+            odoo_client: Optional injected Odoo RPC client for revenue data.
+                        If not provided, revenue aggregation will report
+                        data as unavailable.
+        """
         self.vault_root = vault_root
         self.config = config or BriefingConfig()
         self._odoo = odoo_client

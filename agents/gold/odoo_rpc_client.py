@@ -90,17 +90,30 @@ def _jsonrpc_payload(
 
 
 class OdooRPCClient:
-    """JSON-RPC client for Odoo 19+ Community Edition."""
+    """JSON-RPC client for Odoo 19+ Community Edition.
+
+    Supports dependency injection for session management and testing.
+    """
 
     def __init__(
         self,
         config: OdooConfig,
         vault_root: Path,
         executor: object | None = None,
+        session: OdooSession | None = None,
     ) -> None:
+        """Initialize Odoo RPC client.
+
+        Args:
+            config: Odoo connection configuration.
+            vault_root: Root path of the vault.
+            executor: Optional resilient executor for retry logic.
+            session: Optional injected session (for testing/DI).
+                     If not provided, creates a new unauthenticated session.
+        """
         self.config = config
         self.vault_root = vault_root
-        self._session = OdooSession(
+        self._session = session or OdooSession(
             url=config.url, database=config.database
         )
         self._executor = executor  # ResilientExecutor, if wired

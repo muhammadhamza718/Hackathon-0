@@ -102,13 +102,25 @@ _DEFAULT_ADAPTERS: dict[str, PlatformAdapter] = {
 
 
 class SocialBridge:
-    """Multi-platform social media management with HITL approval gating."""
+    """Multi-platform social media management with HITL approval gating.
+
+    Supports dependency injection for platform adapters, enabling custom
+    platform implementations and easier testing.
+    """
 
     def __init__(
         self,
         vault_root: Path,
         adapters: dict[str, PlatformAdapter] | None = None,
     ) -> None:
+        """Initialize SocialBridge.
+
+        Args:
+            vault_root: Root path of the vault.
+            adapters: Optional dict of platform name to PlatformAdapter.
+                     If not provided, uses default adapters for X, Facebook,
+                     and Instagram.
+        """
         self.vault_root = vault_root
         self._adapters = adapters or dict(_DEFAULT_ADAPTERS)
 
@@ -154,8 +166,10 @@ class SocialBridge:
         if adapter is None:
             raise SocialMediaError(f"No adapter for platform: {platform}")
 
+        # Validate BEFORE adaptation
+        self._validate_content(platform, content, media_paths)
+
         adapted = adapter.adapt_content(content)
-        self._validate_content(platform, adapted, media_paths)
 
         draft_id = str(uuid.uuid4())[:8]
         ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%SZ")
