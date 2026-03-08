@@ -2,13 +2,15 @@
 
 ALL social posts MUST go through ``/Pending_Approval/`` per Constitution XII.
 Platform adapters handle content adaptation for Twitter/X, Facebook, and
-Instagram.
+Instagram with hashtag suggestions, emoji optimization, and character counting.
 """
 
 from __future__ import annotations
 
+import re
+import unicodedata
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Protocol
@@ -33,10 +35,290 @@ from agents.utils import ensure_dir, slugify, utcnow_iso
 # ---------------------------------------------------------------------------
 
 PLATFORM_LIMITS: dict[str, dict] = {
-    "X": {"max_text": 280, "max_images": 4},
-    "Facebook": {"max_text": 63206, "max_images": 10},
-    "Instagram": {"max_text": 2200, "max_images": 10},
+    "X": {"max_text": 280, "max_images": 4, "hashtag_limit": 3},
+    "Facebook": {"max_text": 63206, "max_images": 10, "hashtag_limit": 10},
+    "Instagram": {"max_text": 2200, "max_images": 10, "hashtag_limit": 30},
 }
+
+
+# ---------------------------------------------------------------------------
+# Hashtag suggestion engine
+# ---------------------------------------------------------------------------
+
+HASHTAG_CATEGORIES: dict[str, list[str]] = {
+    "tech": ["#Tech", "#Innovation", "#AI", "#Automation", "#DigitalTransformation", "#MachineLearning"],
+    "business": ["#Business", "#Entrepreneurship", "#Startup", "#Growth", "#Leadership", "#Strategy"],
+    "marketing": ["#Marketing", "#SocialMedia", "#ContentMarketing", "#Brand", "#DigitalMarketing", "#SEO"],
+    "productivity": ["#Productivity", "#TimeManagement", "#Efficiency", "#Workflow", "#Organization"],
+    "finance": ["#Finance", "#Accounting", "#FinTech", "#Investment", "#Money", "#Budgeting"],
+    "general": ["#Monday", "#Tuesday", "#Wednesday", "#Thursday", "#Friday", "#Weekend", "#Motivation"],
+}
+
+TRENDING_HASHTAGS: list[str] = [
+    "#MondayMotivation", "#TuesdayThoughts", "#WednesdayWisdom",
+    "#ThursdayThoughts", "#FridayFeeling", "#SaturdayVibes", "#SundayFunday",
+    "#ThrowbackThursday", "#FlashbackFriday", "#NewWeekNewGoals",
+]
+
+
+def suggest_hashtags(
+    content: str,
+    category: str = "general",
+    max_count: int = 5,
+    include_trending: bool = False,
+) -> list[str]:
+    """Suggest relevant hashtags based on content and category.
+
+    Args:
+        content: The post content to analyze for keyword matching.
+        category: Hashtag category (tech, business, marketing, etc.).
+        max_count: Maximum number of hashtags to suggest.
+        include_trending: Whether to include trending hashtags.
+
+    Returns:
+        List of suggested hashtags.
+    """
+    suggestions: list[str] = []
+    content_lower = content.lower()
+
+    # Get category hashtags
+    category_tags = HASHTAG_CATEGORIES.get(category, HASHTAG_CATEGORIES["general"])
+
+    # Keyword matching for smarter suggestions
+    keyword_map = {
+        "ai": ["#AI", "#ArtificialIntelligence", "#MachineLearning"],
+        "automation": ["#Automation", "#RPA", "#WorkflowAutomation"],
+        "business": ["#Business", "#Entrepreneurship", "#Startup"],
+        "marketing": ["#Marketing", "#SocialMedia", "#ContentMarketing"],
+        "productivity": ["#Productivity", "#Efficiency", "#TimeManagement"],
+        "finance": ["#Finance", "#Accounting", "#FinTech"],
+        "tech": ["#Tech", "#Technology", "#Innovation"],
+    }
+
+    for keyword, tags in keyword_map.items():
+        if keyword in content_lower:
+            suggestions.extend(tags[:2])
+
+    # Add category tags
+    suggestions.extend(category_tags[:max_count - len(suggestions)])
+
+    # Add trending if requested
+    if include_trending:
+        day_name = datetime.now().strftime("%A")
+        day_trending = [t for t in TRENDING_HASHTAGS if day_name[:3] in t]
+        suggestions.extend(day_trending[:2])
+
+    # Remove duplicates while preserving order
+    seen: set[str] = set()
+    unique: list[str] = []
+    for tag in suggestions:
+        if tag not in seen:
+            seen.add(tag)
+            unique.append(tag)
+
+    return unique[:max_count]
+
+
+# ---------------------------------------------------------------------------
+# Emoji optimization
+# ---------------------------------------------------------------------------
+
+EMOJI_CATEGORIES: dict[str, list[str]] = {
+    "celebration": ["🎉", "🎊", "🥳", "🍾", "✨", "🌟"],
+    "business": ["💼", "📊", "📈", "💰", "🏢", "🤝"],
+    "tech": ["💻", "🤖", "⚡", "🔧", "🔌", "💡"],
+    "marketing": ["📣", "📢", "🎯", "📱", "👀", "🔥"],
+    "positive": ["👍", "✅", "🌟", "💪", "🙌", "😊"],
+    "negative": ["⚠️", "❌", "🚫", "😕", "📉", "⛔"],
+    "neutral": ["ℹ️", "📌", "📝", "🔗", "📋", "🗓️"],
+    "time": ["⏰", "📅", "⏱️", "🕐", "📆", "⌛"],
+}
+
+# Platform-specific emoji preferences (some platforms render differently)
+PLATFORM_EMOJI_PREFERENCES: dict[str, dict[str, str]] = {
+    "X": {
+        "preferred": ["🔥", "💡", "⚡", "🚀", "📊"],
+        "avoid": ["👨‍👩‍👧‍👦", "🧑‍🤝‍🧑"],  # Complex emojis may not render well
+    },
+    "Facebook": {
+        "preferred": ["😊", "👍", "❤️", "🎉", "🙌"],
+        "avoid": [],  # Facebook handles most emojis well
+    },
+    "Instagram": {
+        "preferred": ["✨", "🌟", "💫", "🔥", "💕", "📸"],
+        "avoid": [],  # Instagram is emoji-friendly
+    },
+}
+
+
+def count_emoji_characters(text: str) -> int:
+    """Count emoji characters in text (handles multi-codepoint emojis).
+
+    Uses Unicode property checks and known emoji ranges for accurate counting.
+
+    Args:
+        text: The text to analyze.
+
+    Returns:
+        Number of emoji characters.
+    """
+    emoji_count = 0
+    for char in text:
+        code = ord(char)
+        # Common emoji Unicode ranges
+        if (
+            0x1F300 <= code <= 0x1F9FF  # Miscellaneous Symbols and Pictographs, Emoticons, etc.
+            or 0x2600 <= code <= 0x26FF  # Miscellaneous Symbols
+            or 0x2700 <= code <= 0x27BF  # Dingbats
+            or 0x1FA00 <= code <= 0x1FAFF  # Chess, symbols
+            or 0x1F600 <= code <= 0x1F64F  # Emoticons
+            or 0x1F680 <= code <= 0x1F6FF  # Transport and Map
+            or code in (0x200D,)  # Zero-width joiner (part of complex emojis)
+        ):
+            emoji_count += 1
+        # Also try unicodedata name check as fallback
+        else:
+            try:
+                name = unicodedata.name(char, "")
+                if "EMOJI" in name or "SYMBOL" in name:
+                    emoji_count += 1
+            except ValueError:
+                pass
+    return emoji_count
+
+
+def get_emoji_display_width(text: str) -> int:
+    """Calculate display width considering emoji take ~2 char widths.
+
+    Args:
+        text: The text to measure.
+
+    Returns:
+        Approximate display width in characters.
+    """
+    emoji_count = count_emoji_characters(text)
+    regular_chars = len(text) - emoji_count
+    # Emojis typically display as 2 character widths
+    return regular_chars + (emoji_count * 2)
+
+
+def optimize_emojis_for_platform(
+    content: str,
+    platform: str,
+    max_emojis: int = 5,
+) -> str:
+    """Optimize emoji selection for platform-specific rendering.
+
+    Args:
+        content: The content with emojis to optimize.
+        platform: Target platform (X, Facebook, Instagram).
+        max_emojis: Maximum number of emojis to keep.
+
+    Returns:
+        Content with optimized emoji selection.
+    """
+    preferences = PLATFORM_EMOJI_PREFERENCES.get(platform, {})
+    preferred = preferences.get("preferred", [])
+    avoid = preferences.get("avoid", [])
+
+    # Extract emojis from content
+    emojis_found: list[tuple[int, str]] = []
+    for i, char in enumerate(content):
+        try:
+            name = unicodedata.name(char, "")
+            if any(kw in name for kw in ["EMOJI", "SYMBOL", "DINGBAT"]):
+                emojis_found.append((i, char))
+        except ValueError:
+            pass
+
+    # Remove avoided emojis
+    result = content
+    for pos, emoji in reversed(emojis_found):
+        if emoji in avoid:
+            result = result[:pos] + result[pos + 1:]
+
+    # Count remaining emojis
+    remaining_emoji_count = count_emoji_characters(result)
+
+    # If still too many, reduce to max
+    if remaining_emoji_count > max_emojis:
+        # Keep first max_emojis emojis
+        emoji_positions = []
+        for i, char in enumerate(result):
+            try:
+                name = unicodedata.name(char, "")
+                if any(kw in name for kw in ["EMOJI", "SYMBOL", "DINGBAT"]):
+                    emoji_positions.append(i)
+            except ValueError:
+                pass
+
+        # Remove excess emojis from end
+        for pos in reversed(emoji_positions[max_emojis:]):
+            result = result[:pos] + result[pos + 1:]
+
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Platform-specific best practices
+# ---------------------------------------------------------------------------
+
+PLATFORM_BEST_PRACTICES: dict[str, dict] = {
+    "X": {
+        "optimal_length": (100, 260),
+        "hashtag_strategy": "1-3 highly relevant hashtags",
+        "emoji_strategy": "Use sparingly (1-3), prefer simple emojis",
+        "posting_tips": [
+            "Keep it concise and punchy",
+            "Use threads for longer content",
+            "Include visuals for higher engagement",
+            "Tag relevant accounts with @",
+        ],
+        "engagement_boosters": ["Ask questions", "Use polls", "Share timely news"],
+    },
+    "Facebook": {
+        "optimal_length": (50, 200),
+        "hashtag_strategy": "3-5 hashtags, mix of broad and niche",
+        "emoji_strategy": "Moderate use (3-5), friendly tone",
+        "posting_tips": [
+            "Longer posts perform well",
+            "Include call-to-action",
+            "Use high-quality images",
+            "Tag pages and people",
+        ],
+        "engagement_boosters": ["Ask for opinions", "Share stories", "Post videos"],
+    },
+    "Instagram": {
+        "optimal_length": (150, 500),
+        "hashtag_strategy": "10-30 hashtags, mix of popular and niche",
+        "emoji_strategy": "Heavy use encouraged (5-10), visual storytelling",
+        "posting_tips": [
+            "First comment for hashtags (optional)",
+            "High-quality visuals essential",
+            "Use Stories for engagement",
+            "Tag locations and accounts",
+        ],
+        "engagement_boosters": ["Behind-the-scenes", "User-generated content", "Reels"],
+    },
+}
+
+
+def get_platform_best_practices(platform: str) -> dict:
+    """Get best practices for a specific platform.
+
+    Args:
+        platform: Platform name (X, Facebook, Instagram).
+
+    Returns:
+        Dictionary of best practices.
+
+    Raises:
+        SocialMediaError: If platform is unknown.
+    """
+    practices = PLATFORM_BEST_PRACTICES.get(platform)
+    if practices is None:
+        raise SocialMediaError(f"Unknown platform: {platform}")
+    return practices
 
 
 # ---------------------------------------------------------------------------
@@ -52,41 +334,121 @@ class PlatformAdapter(Protocol):
     max_images: int
 
     def adapt_content(self, content: str) -> str: ...
+    def count_characters(self, content: str) -> int: ...
+    def suggest_hashtags(self, content: str, max_count: int = 5) -> list[str]: ...
 
 
 @dataclass
 class TwitterAdapter:
+    """Platform adapter for Twitter/X with character-aware counting."""
+
     platform_name: str = "X"
     max_text_length: int = 280
     max_images: int = 4
+    hashtag_limit: int = 3
 
     def adapt_content(self, content: str) -> str:
-        """Truncate to 280 chars for Twitter/X."""
+        """Truncate to 280 chars for Twitter/X, preserving emoji integrity."""
         if len(content) <= self.max_text_length:
             return content
-        return content[: self.max_text_length - 3] + "..."
+
+        # Try to truncate at word boundary, preserving emojis
+        truncated = content[: self.max_text_length - 3]
+        # Find last space or emoji boundary
+        last_space = truncated.rfind(" ")
+        if last_space > self.max_text_length - 50:
+            truncated = truncated[:last_space]
+
+        return truncated + "..."
+
+    def count_characters(self, content: str) -> int:
+        """Count characters with emoji awareness for X platform.
+
+        X counts URLs as 23 chars regardless of length.
+        Emojis count as 2 characters for display width.
+        """
+        url_pattern = r"https?://\S+"
+        urls = re.findall(url_pattern, content)
+        url_chars = sum(len(url) for url in urls)
+        url_fixed = 23 * len(urls)
+
+        emoji_count = count_emoji_characters(content)
+        regular_chars = len(content) - emoji_count - url_chars
+
+        return regular_chars + (emoji_count * 2) + url_fixed
+
+    def suggest_hashtags(self, content: str, max_count: int = 5) -> list[str]:
+        """Suggest hashtags optimized for X platform."""
+        return suggest_hashtags(content, max_count=min(max_count, self.hashtag_limit))
 
 
 @dataclass
 class FacebookAdapter:
+    """Platform adapter for Facebook with long-form support."""
+
     platform_name: str = "Facebook"
     max_text_length: int = 63206
     max_images: int = 10
+    hashtag_limit: int = 10
 
     def adapt_content(self, content: str) -> str:
-        """Facebook allows long content — pass through."""
-        return content[: self.max_text_length]
+        """Facebook allows long content — pass through with minimal truncation."""
+        if len(content) <= self.max_text_length:
+            return content
+        return content[: self.max_text_length - 3] + "..."
+
+    def count_characters(self, content: str) -> int:
+        """Count characters for Facebook (standard counting)."""
+        return len(content)
+
+    def suggest_hashtags(self, content: str, max_count: int = 5) -> list[str]:
+        """Suggest hashtags optimized for Facebook."""
+        return suggest_hashtags(
+            content,
+            max_count=min(max_count, self.hashtag_limit),
+            include_trending=True,
+        )
 
 
 @dataclass
 class InstagramAdapter:
+    """Platform adapter for Instagram with hashtag optimization."""
+
     platform_name: str = "Instagram"
     max_text_length: int = 2200
     max_images: int = 10
+    hashtag_limit: int = 30
 
     def adapt_content(self, content: str) -> str:
-        """Truncate to 2200 chars, optimize for hashtags."""
-        return content[: self.max_text_length]
+        """Truncate to 2200 chars, optimize for hashtag placement."""
+        if len(content) <= self.max_text_length:
+            return content
+
+        # Try to preserve hashtags at the end
+        hashtag_pattern = r"#\w+"
+        hashtags = re.findall(hashtag_pattern, content)
+
+        # Reserve space for hashtags
+        hashtag_space = sum(len(h) + 1 for h in hashtags[:15])
+        content_without_tags = re.sub(hashtag_pattern, "", content).strip()
+
+        available = self.max_text_length - hashtag_space - 10
+        truncated = content_without_tags[:available]
+
+        return f"{truncated}\n\n{' '.join(hashtags[:15])}"
+
+    def count_characters(self, content: str) -> int:
+        """Count characters for Instagram (standard counting)."""
+        return len(content)
+
+    def suggest_hashtags(self, content: str, max_count: int = 5) -> list[str]:
+        """Suggest hashtags optimized for Instagram (allows more)."""
+        return suggest_hashtags(
+            content,
+            category="marketing",
+            max_count=min(max_count, self.hashtag_limit),
+            include_trending=True,
+        )
 
 
 _DEFAULT_ADAPTERS: dict[str, PlatformAdapter] = {
@@ -153,8 +515,21 @@ class SocialBridge:
         media_paths: tuple[str, ...] = (),
         scheduled: str = "immediate",
         rationale: str = "",
+        hashtag_category: str = "general",
+        include_hashtags: bool = True,
+        optimize_emojis: bool = True,
     ) -> SocialDraft:
         """Create a social media draft in ``/Pending_Approval/``.
+
+        Args:
+            platform: Target platform (X, Facebook, Instagram).
+            content: Post content to adapt.
+            media_paths: Paths to media files to attach.
+            scheduled: Scheduling directive (immediate or specific time).
+            rationale: Reason for creating this post.
+            hashtag_category: Category for hashtag suggestions.
+            include_hashtags: Whether to auto-suggest and append hashtags.
+            optimize_emojis: Whether to optimize emojis for the platform.
 
         Returns:
             A ``SocialDraft`` with ``approval_status="pending"``.
@@ -166,10 +541,27 @@ class SocialBridge:
         if adapter is None:
             raise SocialMediaError(f"No adapter for platform: {platform}")
 
+        # Optimize emojis if requested
+        if optimize_emojis:
+            content = optimize_emojis_for_platform(content, platform)
+
         # Validate BEFORE adaptation
         self._validate_content(platform, content, media_paths)
 
+        # Auto-suggest hashtags if requested
+        if include_hashtags:
+            suggested = adapter.suggest_hashtags(content, max_count=10)
+            # Append hashtags if not already present
+            existing_hashtags = set(re.findall(r"#\w+", content))
+            new_hashtags = [h for h in suggested if h not in existing_hashtags]
+            if new_hashtags:
+                hashtag_str = " ".join(new_hashtags[:5])  # Limit to 5 for draft
+                content = f"{content}\n\n{hashtag_str}"
+
         adapted = adapter.adapt_content(content)
+
+        # Calculate character count with emoji awareness
+        char_count = adapter.count_characters(adapted)
 
         draft_id = str(uuid.uuid4())[:8]
         ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%SZ")
@@ -181,6 +573,9 @@ class SocialBridge:
             f"- {p}" for p in media_paths
         ) if media_paths else "None"
 
+        # Get best practices for context
+        best_practices = get_platform_best_practices(platform)
+
         file_content = (
             "---\n"
             f"type: social-post\n"
@@ -188,13 +583,20 @@ class SocialBridge:
             f"scheduled: {scheduled}\n"
             f"rationale: {rationale}\n"
             f"risk_level: Low\n"
+            f"character_count: {char_count}\n"
+            f"emoji_optimized: {optimize_emojis}\n"
             "---\n\n"
             f"# Social Media Post Draft\n\n"
             f"**Platform**: {platform}\n"
-            f"**Scheduled**: {scheduled}\n\n"
+            f"**Scheduled**: {scheduled}\n"
+            f"**Character Count**: {char_count} (limit: {adapter.max_text_length})\n\n"
             f"## Content\n\n{adapted}\n\n"
             f"## Media\n\n{media_section}\n\n"
-            f"## Rationale\n\n{rationale}\n"
+            f"## Rationale\n\n{rationale}\n\n"
+            f"## Platform Best Practices\n\n"
+            f"- **Optimal Length**: {best_practices['optimal_length'][0]}-{best_practices['optimal_length'][1]} chars\n"
+            f"- **Hashtag Strategy**: {best_practices['hashtag_strategy']}\n"
+            f"- **Emoji Strategy**: {best_practices['emoji_strategy']}\n"
         )
 
         pending_dir = ensure_dir(self.vault_root / PENDING_APPROVAL_DIR)
@@ -210,13 +612,18 @@ class SocialBridge:
             rationale=rationale,
             approval_status="pending",
             approval_file_path=str(approval_path),
+            adapted_versions={
+                "character_count": char_count,
+                "emoji_count": count_emoji_characters(adapted),
+                "hashtag_count": len(re.findall(r"#\w+", adapted)),
+            },
         )
 
         append_gold_log(
             self.vault_root,
             action="social_draft",
             source_file=f"Pending_Approval/{filename}",
-            details=f"Draft {platform} post ({len(adapted)} chars)",
+            details=f"Draft {platform} post ({char_count} chars, emoji optimized: {optimize_emojis})",
             rationale=rationale or "Social media post draft",
         )
 
@@ -229,8 +636,19 @@ class SocialBridge:
         media_paths: tuple[str, ...] = (),
         scheduled: str = "immediate",
         rationale: str = "",
+        include_hashtags: bool = True,
+        optimize_emojis: bool = True,
     ) -> list[SocialDraft]:
         """Adapt content for each platform and create separate drafts.
+
+        Args:
+            content: Original post content.
+            platforms: List of target platforms.
+            media_paths: Paths to media files to attach.
+            scheduled: Scheduling directive.
+            rationale: Reason for creating this post.
+            include_hashtags: Whether to auto-suggest hashtags per platform.
+            optimize_emojis: Whether to optimize emojis per platform.
 
         Returns:
             List of ``SocialDraft`` objects, one per platform.
@@ -243,9 +661,127 @@ class SocialBridge:
                 media_paths=media_paths,
                 scheduled=scheduled,
                 rationale=rationale,
+                include_hashtags=include_hashtags,
+                optimize_emojis=optimize_emojis,
             )
             drafts.append(draft)
         return drafts
+
+    # ------------------------------------------------------------------
+    # Utility methods
+    # ------------------------------------------------------------------
+
+    def get_hashtag_suggestions(
+        self,
+        content: str,
+        platform: str,
+        category: str = "general",
+        max_count: int = 10,
+    ) -> list[str]:
+        """Get hashtag suggestions for content on a specific platform.
+
+        Args:
+            content: The post content to analyze.
+            platform: Target platform (X, Facebook, Instagram).
+            category: Hashtag category for suggestions.
+            max_count: Maximum number of hashtags to suggest.
+
+        Returns:
+            List of suggested hashtags.
+
+        Raises:
+            SocialMediaError: If platform is unknown.
+        """
+        adapter = self._adapters.get(platform)
+        if adapter is None:
+            raise SocialMediaError(f"No adapter for platform: {platform}")
+        return adapter.suggest_hashtags(content, max_count)
+
+    def count_characters(
+        self,
+        content: str,
+        platform: str,
+    ) -> int:
+        """Count characters with platform-aware emoji handling.
+
+        Args:
+            content: Content to count.
+            platform: Target platform.
+
+        Returns:
+            Character count adjusted for platform rules.
+
+        Raises:
+            SocialMediaError: If platform is unknown.
+        """
+        adapter = self._adapters.get(platform)
+        if adapter is None:
+            raise SocialMediaError(f"No adapter for platform: {platform}")
+        return adapter.count_characters(content)
+
+    def get_best_practices(self, platform: str) -> dict:
+        """Get platform-specific best practices.
+
+        Args:
+            platform: Target platform.
+
+        Returns:
+            Dictionary of best practices.
+        """
+        return get_platform_best_practices(platform)
+
+    def analyze_content(
+        self,
+        content: str,
+        platform: str,
+    ) -> dict:
+        """Analyze content for platform optimization.
+
+        Args:
+            content: Content to analyze.
+            platform: Target platform.
+
+        Returns:
+            Analysis dict with character count, emoji count,
+            hashtag count, and optimization suggestions.
+        """
+        adapter = self._adapters.get(platform)
+        if adapter is None:
+            raise SocialMediaError(f"No adapter for platform: {platform}")
+
+        char_count = adapter.count_characters(content)
+        emoji_count = count_emoji_characters(content)
+        hashtag_count = len(re.findall(r"#\w+", content))
+        best_practices = get_platform_best_practices(platform)
+
+        suggestions: list[str] = []
+
+        # Check length
+        optimal = best_practices["optimal_length"]
+        if char_count < optimal[0]:
+            suggestions.append(f"Consider adding more content (current: {char_count}, optimal min: {optimal[0]})")
+        elif char_count > optimal[1]:
+            suggestions.append(f"Consider shortening (current: {char_count}, optimal max: {optimal[1]})")
+
+        # Check emoji count
+        emoji_strategy = best_practices["emoji_strategy"]
+        if "sparingly" in emoji_strategy.lower() and emoji_count > 3:
+            suggestions.append(f"Reduce emojis for {platform} (current: {emoji_count})")
+
+        # Check hashtag count
+        hashtag_limit = PLATFORM_LIMITS[platform]["hashtag_limit"]
+        if hashtag_count > hashtag_limit:
+            suggestions.append(f"Reduce hashtags (current: {hashtag_count}, limit: {hashtag_limit})")
+
+        return {
+            "platform": platform,
+            "character_count": char_count,
+            "character_limit": adapter.max_text_length,
+            "emoji_count": emoji_count,
+            "hashtag_count": hashtag_count,
+            "within_limits": char_count <= adapter.max_text_length,
+            "suggestions": suggestions,
+        }
 
     # ------------------------------------------------------------------
     # Publish (requires /Approved/)
