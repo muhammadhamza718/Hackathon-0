@@ -356,13 +356,15 @@ class CEOBriefingEngine:
             age_hours: Task age in hours.
 
         Returns:
-            Escalated priority string.
+            Escalated priority string (higher priority for older tasks).
         """
         # Escalation rules:
-        # - 48h+ old: escalate one level
+        # - 48h+ old: escalate one level (towards CRITICAL)
         # - 72h+ old: escalate two levels
         # - 96h+ old: mark as CRITICAL
+        # - P0 and CRITICAL are not escalated further
 
+        # Priority order from LOWEST to HIGHEST
         priority_order = ["P3", "LOW", "P2", "MEDIUM", "P1", "HIGH", "P0", "CRITICAL"]
 
         try:
@@ -370,14 +372,18 @@ class CEOBriefingEngine:
         except ValueError:
             current_idx = 3  # Default to MEDIUM
 
-        # Apply escalation
+        # P0 and CRITICAL are already max priority - don't escalate
+        if original_priority.upper() in {"P0", "CRITICAL"}:
+            return original_priority.upper()
+
+        # Apply escalation (higher index = higher priority)
         if age_hours >= 96:
             return "CRITICAL"
         elif age_hours >= 72:
-            new_idx = max(0, current_idx - 2)
+            new_idx = min(len(priority_order) - 1, current_idx + 2)
             return priority_order[new_idx]
         elif age_hours >= 48:
-            new_idx = max(0, current_idx - 1)
+            new_idx = min(len(priority_order) - 1, current_idx + 1)
             return priority_order[new_idx]
 
         return original_priority
