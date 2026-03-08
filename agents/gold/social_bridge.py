@@ -26,6 +26,12 @@ from agents.exceptions import (
     SocialMediaError,
 )
 from agents.gold.audit_gold import append_gold_log
+from agents.gold.image_optimizer import (
+    OptimizationResult,
+    optimize_image,
+    validate_and_optimize_images,
+    validate_image,
+)
 from agents.gold.models import PublishResult, SocialDraft
 from agents.utils import ensure_dir, slugify, utcnow_iso
 
@@ -518,6 +524,8 @@ class SocialBridge:
         hashtag_category: str = "general",
         include_hashtags: bool = True,
         optimize_emojis: bool = True,
+        optimize_images: bool = True,
+        strip_exif: bool = True,
     ) -> SocialDraft:
         """Create a social media draft in ``/Pending_Approval/``.
 
@@ -530,12 +538,15 @@ class SocialBridge:
             hashtag_category: Category for hashtag suggestions.
             include_hashtags: Whether to auto-suggest and append hashtags.
             optimize_emojis: Whether to optimize emojis for the platform.
+            optimize_images: Whether to validate and optimize images.
+            strip_exif: Whether to strip EXIF data from images for privacy.
 
         Returns:
             A ``SocialDraft`` with ``approval_status="pending"``.
 
         Raises:
-            ContentValidationError: If content exceeds platform limits.
+            ContentValidationError: If content exceeds platform limits or
+                images fail validation.
         """
         adapter = self._adapters.get(platform)
         if adapter is None:
@@ -545,8 +556,28 @@ class SocialBridge:
         if optimize_emojis:
             content = optimize_emojis_for_platform(content, platform)
 
-        # Validate BEFORE adaptation
+        # Validate content BEFORE adaptation
         self._validate_content(platform, content, media_paths)
+
+        # Validate and optimize images if requested
+        image_results: list[OptimizationResult] = []
+        optimized_media_paths: list[str] = list(media_paths)
+
+        if optimize_images and media_paths:
+            for media_path in media_paths:
+                # Validate each image
+                validate_image(media_path, platform)
+                # Optimize (may return same path if Pillow unavailable)
+                result = optimize_image(
+                    media_path,
+                    platform,
+                    strip_exif=strip_exif,
+                )
+                image_results.append(result)
+                if result.optimized_path != result.original_path:
+                    # Update path to optimized version
+                    idx = optimized_media_paths.index(media_path)
+                    optimized_media_paths[idx] = result.optimized_path
 
         # Auto-suggest hashtags if requested
         if include_hashtags:
@@ -570,8 +601,22 @@ class SocialBridge:
 
         # Build approval file (Constitution XII format)
         media_section = "\n".join(
-            f"- {p}" for p in media_paths
-        ) if media_paths else "None"
+            f"- {p}" for p in optimized_media_paths
+        ) if optimized_media_paths else "None"
+
+        # Image optimization summary
+        image_summary = ""
+        if image_results:
+            total_savings = sum(
+                r.original_size_bytes - r.optimized_size_bytes
+                for r in image_results
+            )
+            image_summary = (
+                f"\n## Image Optimization\n\n"
+                f"- **Images processed**: {len(image_results)}\n"
+                f"- **Total size saved**: {total_savings / 1024:.1f} KB\n"
+                f"- **EXIF stripped**: {strip_exif}\n"
+            )
 
         # Get best practices for context
         best_practices = get_platform_best_practices(platform)
@@ -585,13 +630,15 @@ class SocialBridge:
             f"risk_level: Low\n"
             f"character_count: {char_count}\n"
             f"emoji_optimized: {optimize_emojis}\n"
+            f"images_optimized: {optimize_images}\n"
             "---\n\n"
             f"# Social Media Post Draft\n\n"
             f"**Platform**: {platform}\n"
             f"**Scheduled**: {scheduled}\n"
             f"**Character Count**: {char_count} (limit: {adapter.max_text_length})\n\n"
             f"## Content\n\n{adapted}\n\n"
-            f"## Media\n\n{media_section}\n\n"
+            f"## Media\n\n{media_section}\n"
+            f"{image_summary}"
             f"## Rationale\n\n{rationale}\n\n"
             f"## Platform Best Practices\n\n"
             f"- **Optimal Length**: {best_practices['optimal_length'][0]}-{best_practices['optimal_length'][1]} chars\n"
@@ -607,7 +654,7 @@ class SocialBridge:
             draft_id=draft_id,
             platform=platform,
             content=adapted,
-            media_paths=media_paths,
+            media_paths=tuple(optimized_media_paths),
             scheduled=scheduled,
             rationale=rationale,
             approval_status="pending",
@@ -616,6 +663,14 @@ class SocialBridge:
                 "character_count": char_count,
                 "emoji_count": count_emoji_characters(adapted),
                 "hashtag_count": len(re.findall(r"#\w+", adapted)),
+                "image_optimizations": [
+                    {
+                        "original": r.original_path,
+                        "optimized": r.optimized_path,
+                        "compression_pct": r.compression_ratio,
+                    }
+                    for r in image_results
+                ],
             },
         )
 
@@ -623,7 +678,7 @@ class SocialBridge:
             self.vault_root,
             action="social_draft",
             source_file=f"Pending_Approval/{filename}",
-            details=f"Draft {platform} post ({char_count} chars, emoji optimized: {optimize_emojis})",
+            details=f"Draft {platform} post ({char_count} chars, {len(image_results)} images optimized)",
             rationale=rationale or "Social media post draft",
         )
 
@@ -638,6 +693,8 @@ class SocialBridge:
         rationale: str = "",
         include_hashtags: bool = True,
         optimize_emojis: bool = True,
+        optimize_images: bool = True,
+        strip_exif: bool = True,
     ) -> list[SocialDraft]:
         """Adapt content for each platform and create separate drafts.
 
@@ -649,6 +706,8 @@ class SocialBridge:
             rationale: Reason for creating this post.
             include_hashtags: Whether to auto-suggest hashtags per platform.
             optimize_emojis: Whether to optimize emojis per platform.
+            optimize_images: Whether to validate and optimize images.
+            strip_exif: Whether to strip EXIF data from images.
 
         Returns:
             List of ``SocialDraft`` objects, one per platform.
@@ -663,6 +722,8 @@ class SocialBridge:
                 rationale=rationale,
                 include_hashtags=include_hashtags,
                 optimize_emojis=optimize_emojis,
+                optimize_images=optimize_images,
+                strip_exif=strip_exif,
             )
             drafts.append(draft)
         return drafts

@@ -138,6 +138,7 @@ class TestDraftPost:
             scheduled="2026-03-10T10:00:00",
             rationale="Testing social media draft",
             include_hashtags=False,  # Disable auto-hashtags for this test
+            optimize_images=False,  # Disable image optimization for this test
         )
 
         # Check that approval file was created
@@ -189,7 +190,8 @@ class TestDraftMultiPost:
             content="Multi-platform content",
             platforms=["X", "Facebook"],
             media_paths=("shared.jpg",),
-            rationale="Multi-platform test"
+            rationale="Multi-platform test",
+            optimize_images=False,  # Disable image optimization for this test
         )
 
         # Should create 2 draft files (one for each platform)
