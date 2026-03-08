@@ -346,7 +346,7 @@ class CEOBriefingEngine:
         return bottlenecks
 
     # ------------------------------------------------------------------
-    # Subscription audit
+    # Subscription audit with usage tracking
     # ------------------------------------------------------------------
 
     def _audit_subscriptions(self) -> list[SubscriptionFinding]:
@@ -397,6 +397,54 @@ class CEOBriefingEngine:
                             )
                     except (ValueError, IndexError):
                         continue
+
+        return findings
+
+    def _track_subscription_usage(self) -> list[SubscriptionFinding]:
+        """Track subscription usage via browser automation.
+
+        Checks login dates and usage patterns for each subscription.
+        Returns findings for unused or underutilized subscriptions.
+
+        Note: In production, this would use Browser MCP to check
+        actual service login dates and usage metrics.
+        """
+        findings: list[SubscriptionFinding] = []
+
+        # Simulated subscription usage data — Browser MCP integration point
+        simulated_usage = {
+            "Slack": {"last_login_days_ago": 2, "monthly_cost": 8.75, "utilization": 85},
+            "Zoom": {"last_login_days_ago": 1, "monthly_cost": 15.99, "utilization": 90},
+            "Adobe Creative Cloud": {"last_login_days_ago": 45, "monthly_cost": 54.99, "utilization": 10},
+            "Figma": {"last_login_days_ago": 3, "monthly_cost": 15.00, "utilization": 75},
+            "Notion": {"last_login_days_ago": 0, "monthly_cost": 10.00, "utilization": 95},
+            "Salesforce": {"last_login_days_ago": 60, "monthly_cost": 75.00, "utilization": 5},
+        }
+
+        for service, data in simulated_usage.items():
+            finding_type = "ok"
+            recommendation = ""
+
+            # Flag unused (no login in 30+ days)
+            if data["last_login_days_ago"] > 30:
+                finding_type = "unused"
+                recommendation = f"No login in {data['last_login_days_ago']} days — consider cancelling"
+            # Flag underused (< 30% utilization)
+            elif data["utilization"] < 30:
+                finding_type = "underused"
+                recommendation = f"Low utilization ({data['utilization']}%) — consider downgrading"
+
+            if finding_type != "ok":
+                findings.append(
+                    SubscriptionFinding(
+                        service_name=service,
+                        monthly_cost=data["monthly_cost"],
+                        utilization_pct=data["utilization"],
+                        finding_type=finding_type,
+                        recommendation=recommendation,
+                        potential_savings=data["monthly_cost"] if finding_type == "unused" else data["monthly_cost"] * 0.5,
+                    )
+                )
 
         return findings
 
