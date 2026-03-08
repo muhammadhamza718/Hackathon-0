@@ -27,6 +27,10 @@ __all__ = [
     "TransientAPIError",
     "LogicAPIError",
     "ApprovalNotFoundError",
+    # Gold Tier Loop exceptions
+    "LoopExitError",
+    "CheckpointError",
+    "StateCorruptionError",
 ]
 
 
@@ -142,3 +146,73 @@ class LogicAPIError(AgentError):
 
 class ApprovalNotFoundError(HITLError):
     """Expected file in /Approved/ but it was not found."""
+
+
+# ---------------------------------------------------------------------------
+# Gold Tier Loop exceptions
+# ---------------------------------------------------------------------------
+
+
+class LoopExitError(AgentError):
+    """Ralph Wiggum loop exited unexpectedly or with errors.
+    
+    Attributes:
+        reason: Explanation for why the loop exited.
+        iterations_completed: Number of iterations completed before exit.
+        exit_promise_met: Whether exit promise was satisfied.
+    """
+    
+    def __init__(
+        self,
+        reason: str,
+        iterations_completed: int = 0,
+        exit_promise_met: bool = False,
+    ) -> None:
+        super().__init__(f"Loop exited: {reason}")
+        self.reason = reason
+        self.iterations_completed = iterations_completed
+        self.exit_promise_met = exit_promise_met
+
+
+class CheckpointError(AgentError):
+    """Error during loop state checkpointing.
+    
+    Attributes:
+        message: Error message describing the checkpoint failure.
+        state_path: Path to the checkpoint file (if known).
+        original_exception: Original exception that caused the failure.
+    """
+    
+    def __init__(
+        self,
+        message: str,
+        state_path: str | None = None,
+        original_exception: Exception | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.state_path = state_path
+        self.original_exception = original_exception
+
+
+class StateCorruptionError(AgentError):
+    """Loop state file is corrupted and cannot be recovered.
+    
+    Attributes:
+        state_path: Path to the corrupted state file.
+        corruption_type: Type of corruption detected.
+        recovery_suggestion: Suggested recovery action.
+    """
+    
+    def __init__(
+        self,
+        state_path: str,
+        corruption_type: str = "unknown",
+        recovery_suggestion: str = "Manual intervention required",
+    ) -> None:
+        super().__init__(
+            f"State corruption detected at {state_path}: {corruption_type}. "
+            f"Suggestion: {recovery_suggestion}"
+        )
+        self.state_path = state_path
+        self.corruption_type = corruption_type
+        self.recovery_suggestion = recovery_suggestion

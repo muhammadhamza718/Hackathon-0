@@ -32,6 +32,7 @@ from agents.constants import (
     STEP_PENDING_MARKER,
     TIER_GOLD,
 )
+from agents.exceptions import CheckpointError, StateCorruptionError
 from agents.gold.audit_gold import append_gold_log
 from agents.gold.models import LoopConfig, LoopResult, LoopState
 from agents.plan_parser import summarize_plan
@@ -90,39 +91,71 @@ class AutonomousLoop:
         return ensure_dir(self.vault_root / LOGS_DIR) / LOOP_STATE_FILE
 
     def checkpoint(self) -> None:
-        """Persist current ``LoopState`` to disk."""
+        """Persist current ``LoopState`` to disk.
+        
+        Raises:
+            CheckpointError: If state cannot be persisted to disk.
+        """
         if self._state is None:
             return
         ts = utcnow_iso()
-        # Create updated state with new checkpoint timestamp
-        self._state = LoopState(
-            session_id=self._state.session_id,
-            iteration=self._state.iteration,
-            active_plan_id=self._state.active_plan_id,
-            active_step_index=self._state.active_step_index,
-            blocked_plans=self._state.blocked_plans,
-            last_checkpoint=ts,
-            exit_promise_met=self._state.exit_promise_met,
-        )
-        self._state_path().write_text(
-            json.dumps(self._state.to_dict(), indent=2) + "\n",
-            encoding="utf-8",
-        )
+        state_path = self._state_path()
+        try:
+            # Create updated state with new checkpoint timestamp
+            self._state = LoopState(
+                session_id=self._state.session_id,
+                iteration=self._state.iteration,
+                active_plan_id=self._state.active_plan_id,
+                active_step_index=self._state.active_step_index,
+                blocked_plans=self._state.blocked_plans,
+                last_checkpoint=ts,
+                exit_promise_met=self._state.exit_promise_met,
+            )
+            state_path.write_text(
+                json.dumps(self._state.to_dict(), indent=2) + "\n",
+                encoding="utf-8",
+            )
+        except (OSError, TypeError, ValueError) as exc:
+            raise CheckpointError(
+                f"Failed to checkpoint loop state: {exc}",
+                state_path=str(state_path),
+                original_exception=exc,
+            ) from exc
 
-    def resume(self) -> LoopState | None:
+    def resume(self) -> LoopState:
         """Load ``LoopState`` from disk if it exists.
 
         Returns:
-            The restored state or ``None`` for a fresh start.
+            The restored state.
+            
+        Raises:
+            StateCorruptionError: If state file is corrupted.
         """
         path = self._state_path()
         if not path.exists():
-            return None
+            return LoopState(session_id=str(uuid.uuid4())[:8])
         try:
-            data = json.loads(path.read_text(encoding="utf-8"))
+            content = path.read_text(encoding="utf-8")
+            data = json.loads(content)
             return LoopState.from_dict(data)
-        except (json.JSONDecodeError, KeyError, OSError):
-            return None
+        except json.JSONDecodeError as exc:
+            raise StateCorruptionError(
+                state_path=str(path),
+                corruption_type="invalid_json",
+                recovery_suggestion="Delete corrupted state file to start fresh session",
+            ) from exc
+        except (KeyError, TypeError) as exc:
+            raise StateCorruptionError(
+                state_path=str(path),
+                corruption_type="missing_fields",
+                recovery_suggestion="Delete corrupted state file to start fresh session",
+            ) from exc
+        except OSError as exc:
+            raise StateCorruptionError(
+                state_path=str(path),
+                corruption_type="read_error",
+                recovery_suggestion="Check file permissions and disk space",
+            ) from exc
 
     # ------------------------------------------------------------------
     # Exit promise
@@ -135,7 +168,7 @@ class AutonomousLoop:
 
         # Check plans
         if plans_dir.exists():
-            incomplete = find_incomplete_plans(plans_dir)
+            incomplete = find_incomplete_plans(self.vault_root)
             if incomplete:
                 return False
 
@@ -207,7 +240,7 @@ class AutonomousLoop:
 
             # 1. Process incomplete plans
             if plans_dir.exists():
-                incomplete = find_incomplete_plans(plans_dir)
+                incomplete = find_incomplete_plans(self.vault_root)
                 for plan_path in incomplete:
                     if not self._running:
                         break
@@ -219,7 +252,8 @@ class AutonomousLoop:
                         continue
 
                     # Try to execute next step
-                    summary = summarize_plan(plan_path)
+                    content = plan_path.read_text(encoding="utf-8")
+                    summary = summarize_plan(content)
                     step_idx = 0
                     for i, step in enumerate(summary.steps):
                         if not step.get("checked", False):
