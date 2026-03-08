@@ -6,30 +6,55 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [Unreleased]
+## [1.0.0-gold] - 2026-03-08
+
+### Gold Tier Features - Complete Implementation
+
+#### Social Media Management (Commits 9-13)
+- **Hashtag & Emoji Support**: Suggestion engine with keyword matching, emoji optimization per platform
+- **Image Optimization**: Validation, compression, EXIF stripping, platform-specific limits
+- **Analytics Aggregation**: WoW/MoM trend analysis, engagement metrics, top-performing posts
+- **Browser MCP Automation**: Posting scripts for X, Facebook, Instagram with session handling
+- **Comprehensive Testing**: 34+ test cases covering all social media modules
+
+#### CEO Briefing Engine (Commits 14-17)
+- **Revenue Trend Analysis**: Week-over-week and month-over-month comparisons
+- **Visual Indicators**: Trend emojis (🟢🟡⚪🟠🔴) for quick status assessment
+- **Subscription Tracking**: Usage monitoring, login date checks, savings calculations
+- **Bottleneck Escalation**: Age-based priority increases, notification system
+- **Customizable Templates**: Service, Product, and Freelance business templates
+
+#### Ralph Wiggum Loop (Commits 18-20)
+- **Progress Tracking**: Iteration reporting, step completion percentages, time estimates
+- **Smart Backoff**: Exponential backoff for HITL-blocked tasks (1s to 300s)
+- **State Visualization**: Text-based state diagrams with blocked plan highlighting
+
+#### Documentation (Commits 21-24)
+- **README Update**: Gold Tier features section, architecture overview
+- **CONTRIBUTING.md**: Development workflow, code standards, PR templates
+- **API Documentation**: Module docstrings, usage examples, type hints
+- **Deployment Guide**: Local, cloud (Oracle/AWS), Docker setups, security hardening
 
 ### Added
-- Gold Tier: Autonomous Employee with Ralph Wiggum Loop
-- Gold Tier: Odoo 19+ JSON-RPC accounting integration
-- Gold Tier: Multi-platform social media management (X, Facebook, Instagram)
-- Gold Tier: CEO Briefing Engine with revenue analysis and bottleneck detection
-- Gold Tier: Resilient executor with exponential backoff and circuit breaker
-- Gold Tier: Safety gate with $100 payment threshold and social post gating
-- Gold Tier: JSON audit logging with mandatory rationale field
-- Pydantic v2 validation for all Gold Tier models
-- Centralized configuration module with environment variable overrides
-- Loop-specific exceptions (LoopExitError, CheckpointError, StateCorruptionError)
+- `agents/gold/image_optimizer.py`: Image validation and compression module
+- `agents/gold/social_automation.py`: Browser MCP automation scripts
+- `agents/gold/briefing_templates.py`: Customizable briefing templates
+- `LoopProgress` dataclass for iteration tracking
+- `_escalate_priority()` method for age-based escalation
+- `_track_subscription_usage()` for login date monitoring
+- `render_state_diagram()` for loop visualization
+- `generate_briefing_with_trends()` for markdown output
 
 ### Changed
-- Converted Gold Tier dataclasses to Pydantic v2 models with runtime validation
-- Enhanced autonomous loop error handling with specific exception types
-- Extracted Gold Tier constants to dedicated config module
-- Updated loop resume to create fresh session instead of returning None
+- Enhanced `SocialBridge.draft_post()` with image optimization options
+- Updated `CEOBriefingEngine` with trend analysis integration
+- Improved `AutonomousLoop` with progress tracking and smart backoff
 
-### Documentation
-- Added Gold Tier architecture documentation with Mermaid diagrams
-- Added configuration reference for all Gold Tier settings
-- Added security guide for credential handling and HITL safety gates
+### Security
+- All social posts route through `/Pending_Approval/`
+- Financial actions > $100 require HITL approval
+- EXIF data stripping for privacy compliance
+- Credential redaction in audit logs
 
 ---
 
