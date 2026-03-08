@@ -282,7 +282,7 @@ class CEOBriefingEngine:
         return " | ".join(parts) if parts else "Revenue trends unavailable"
 
     # ------------------------------------------------------------------
-    # Bottleneck detection
+    # Bottleneck detection with escalation
     # ------------------------------------------------------------------
 
     def _detect_bottlenecks(self) -> list[BottleneckTask]:
@@ -329,11 +329,14 @@ class CEOBriefingEngine:
                         priority = line.split(":", 1)[1].strip().upper()
                         break
 
+            # Apply age-based escalation
+            escalated_priority = self._escalate_priority(priority, age_hours)
+
             bottlenecks.append(
                 BottleneckTask(
                     filename=item.name,
                     age_hours=round(age_hours, 1),
-                    priority=priority,
+                    priority=escalated_priority,
                     summary=summary or item.stem,
                 )
             )
@@ -344,6 +347,76 @@ class CEOBriefingEngine:
             key=lambda b: (priority_order.get(b.priority, 9), -b.age_hours)
         )
         return bottlenecks
+
+    def _escalate_priority(self, original_priority: str, age_hours: float) -> str:
+        """Escalate priority based on task age.
+
+        Args:
+            original_priority: Original task priority.
+            age_hours: Task age in hours.
+
+        Returns:
+            Escalated priority string.
+        """
+        # Escalation rules:
+        # - 48h+ old: escalate one level
+        # - 72h+ old: escalate two levels
+        # - 96h+ old: mark as CRITICAL
+
+        priority_order = ["P3", "LOW", "P2", "MEDIUM", "P1", "HIGH", "P0", "CRITICAL"]
+
+        try:
+            current_idx = priority_order.index(original_priority.upper())
+        except ValueError:
+            current_idx = 3  # Default to MEDIUM
+
+        # Apply escalation
+        if age_hours >= 96:
+            return "CRITICAL"
+        elif age_hours >= 72:
+            new_idx = max(0, current_idx - 2)
+            return priority_order[new_idx]
+        elif age_hours >= 48:
+            new_idx = max(0, current_idx - 1)
+            return priority_order[new_idx]
+
+        return original_priority
+
+    def _get_escalation_notifications(
+        self,
+        bottlenecks: list[BottleneckTask],
+    ) -> list[dict]:
+        """Generate escalation notifications for critical bottlenecks.
+
+        Args:
+            bottlenecks: List of bottleneck tasks.
+
+        Returns:
+            List of notification dicts with escalation details.
+        """
+        notifications: list[dict] = []
+
+        for task in bottlenecks:
+            if task.priority in ("CRITICAL", "P0"):
+                notifications.append({
+                    "type": "critical_escalation",
+                    "task": task.filename,
+                    "priority": task.priority,
+                    "age_hours": task.age_hours,
+                    "message": f"CRITICAL: {task.filename} is {task.age_hours:.1f}h old",
+                    "action_required": "Immediate attention required",
+                })
+            elif task.age_hours >= 72:
+                notifications.append({
+                    "type": "age_escalation",
+                    "task": task.filename,
+                    "priority": task.priority,
+                    "age_hours": task.age_hours,
+                    "message": f"Task {task.filename} escalated due to age ({task.age_hours:.1f}h)",
+                    "action_required": "Review and prioritize",
+                })
+
+        return notifications
 
     # ------------------------------------------------------------------
     # Subscription audit with usage tracking
