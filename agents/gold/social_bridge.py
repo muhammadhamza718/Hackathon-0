@@ -892,24 +892,292 @@ class SocialBridge:
         return result
 
     # ------------------------------------------------------------------
-    # Engagement (READ — autonomous)
+    # Engagement and Analytics (READ — autonomous)
     # ------------------------------------------------------------------
 
     def get_engagement_summary(
-        self, platform: str, period_days: int = 7
+        self,
+        platform: str,
+        period_days: int = 7,
+        compare_previous: bool = True,
     ) -> dict:
-        """Retrieve engagement metrics for a platform.
+        """Retrieve engagement metrics for a platform with trend analysis.
 
-        In production this calls Browser MCP to navigate to analytics.
-        Returns a dict with summary metrics.
+        Args:
+            platform: Target platform (X, Facebook, Instagram).
+            period_days: Number of days for the analysis period.
+            compare_previous: Whether to compare with previous period.
+
+        Returns:
+            Dict with engagement metrics and week-over-week changes.
+
+        Note:
+            In production this calls Browser MCP to navigate to analytics.
+            Currently returns simulated data for testing.
         """
-        # Placeholder — Browser MCP integration point
+        # Simulated data — Browser MCP integration point
+        current = {
+            "X": {"posts": 12, "impressions": 45000, "likes": 890, "comments": 67, "shares": 123},
+            "Facebook": {"posts": 8, "impressions": 32000, "likes": 1200, "comments": 145, "shares": 89},
+            "Instagram": {"posts": 15, "impressions": 78000, "likes": 3400, "comments": 234, "shares": 156},
+        }
+
+        previous = {
+            "X": {"posts": 10, "impressions": 38000, "likes": 720, "comments": 52, "shares": 98},
+            "Facebook": {"posts": 7, "impressions": 28000, "likes": 980, "comments": 112, "shares": 67},
+            "Instagram": {"posts": 12, "impressions": 65000, "likes": 2800, "comments": 189, "shares": 134},
+        }
+
+        current_data = current.get(platform, {})
+        previous_data = previous.get(platform, {}) if compare_previous else {}
+
+        # Calculate week-over-week changes
+        wow_changes = {}
+        for metric in ["posts", "impressions", "likes", "comments", "shares"]:
+            curr_val = current_data.get(metric, 0)
+            prev_val = previous_data.get(metric, 0) if previous_data else 0
+            if prev_val > 0:
+                change_pct = ((curr_val - prev_val) / prev_val) * 100
+                trend = "up" if change_pct > 0 else ("down" if change_pct < 0 else "flat")
+            else:
+                change_pct = 0
+                trend = "flat"
+            wow_changes[metric] = {
+                "current": curr_val,
+                "previous": prev_val,
+                "change_pct": round(change_pct, 1),
+                "trend": trend,
+            }
+
+        # Calculate engagement rate
+        total_engagement = (
+            current_data.get("likes", 0)
+            + current_data.get("comments", 0)
+            + current_data.get("shares", 0)
+        )
+        impressions = current_data.get("impressions", 1)
+        engagement_rate = (total_engagement / impressions) * 100 if impressions > 0 else 0
+
         return {
             "platform": platform,
             "period_days": period_days,
-            "total_posts": 0,
-            "total_impressions": 0,
-            "total_likes": 0,
-            "total_comments": 0,
-            "total_shares": 0,
+            "metrics": {
+                "posts": wow_changes.get("posts", {}),
+                "impressions": wow_changes.get("impressions", {}),
+                "likes": wow_changes.get("likes", {}),
+                "comments": wow_changes.get("comments", {}),
+                "shares": wow_changes.get("shares", {}),
+            },
+            "engagement_rate": round(engagement_rate, 2),
+            "total_engagement": total_engagement,
+            "summary": self._generate_engagement_summary(platform, wow_changes, engagement_rate),
         }
+
+    def _generate_engagement_summary(
+        self,
+        platform: str,
+        wow_changes: dict,
+        engagement_rate: float,
+    ) -> str:
+        """Generate human-readable engagement summary.
+
+        Args:
+            platform: Platform name.
+            wow_changes: Week-over-week changes dict.
+            engagement_rate: Current engagement rate percentage.
+
+        Returns:
+            Human-readable summary string.
+        """
+        highlights = []
+
+        # Check impressions trend
+        imp_trend = wow_changes.get("impressions", {}).get("trend", "flat")
+        imp_change = wow_changes.get("impressions", {}).get("change_pct", 0)
+        if imp_trend == "up":
+            highlights.append(f"Impressions up {imp_change}%")
+        elif imp_trend == "down":
+            highlights.append(f"Impressions down {abs(imp_change)}%")
+
+        # Check engagement rate
+        if engagement_rate > 3:
+            highlights.append(f"Strong engagement rate ({engagement_rate:.1f}%)")
+        elif engagement_rate < 1:
+            highlights.append("Engagement rate below average")
+
+        # Check top metric
+        top_growth = max(
+            wow_changes.items(),
+            key=lambda x: x[1].get("change_pct", 0),
+            default=None,
+        )
+        if top_growth and top_growth[1].get("change_pct", 0) > 10:
+            highlights.append(f"{top_growth[0].title()} leading growth")
+
+        if not highlights:
+            return f"{platform} performance stable this period."
+
+        return f"{platform}: {'; '.join(highlights)}."
+
+    def get_multi_platform_summary(
+        self,
+        platforms: list[str] | None = None,
+        period_days: int = 7,
+    ) -> dict:
+        """Aggregate engagement metrics across multiple platforms.
+
+        Args:
+            platforms: List of platforms to include (default: all).
+            period_days: Analysis period in days.
+
+        Returns:
+            Aggregated summary with per-platform and total metrics.
+        """
+        if platforms is None:
+            platforms = ["X", "Facebook", "Instagram"]
+
+        platform_summaries = {}
+        total_impressions = 0
+        total_engagement = 0
+
+        for platform in platforms:
+            summary = self.get_engagement_summary(platform, period_days)
+            platform_summaries[platform] = summary
+            total_impressions += summary["metrics"]["impressions"].get("current", 0)
+            total_engagement += summary["total_engagement"]
+
+        return {
+            "period_days": period_days,
+            "platforms": platform_summaries,
+            "totals": {
+                "impressions": total_impressions,
+                "engagement": total_engagement,
+                "engagement_rate": round(
+                    (total_engagement / total_impressions * 100)
+                    if total_impressions > 0 else 0,
+                    2,
+                ),
+            },
+            "top_platform": max(
+                platform_summaries.items(),
+                key=lambda x: x[1]["total_engagement"],
+                default=(None, None),
+            )[0],
+        }
+
+    def get_top_performing_posts(
+        self,
+        platform: str,
+        period_days: int = 7,
+        limit: int = 5,
+    ) -> list[dict]:
+        """Get top-performing posts for a platform.
+
+        Args:
+            platform: Target platform.
+            period_days: Analysis period in days.
+            limit: Maximum number of posts to return.
+
+        Returns:
+            List of top posts with engagement metrics.
+
+        Note:
+            In production, this would query actual post data via Browser MCP.
+        """
+        # Simulated top posts — Browser MCP integration point
+        simulated_posts = {
+            "X": [
+                {"id": "post_1", "content": "AI automation tips...", "likes": 234, "shares": 45, "comments": 23},
+                {"id": "post_2", "content": "New product launch...", "likes": 189, "shares": 67, "comments": 34},
+            ],
+            "Facebook": [
+                {"id": "post_1", "content": "Behind the scenes...", "likes": 456, "shares": 23, "comments": 67},
+                {"id": "post_2", "content": "Customer testimonial...", "likes": 345, "shares": 34, "comments": 45},
+            ],
+            "Instagram": [
+                {"id": "post_1", "content": "Product showcase...", "likes": 890, "shares": 56, "comments": 78},
+                {"id": "post_2", "content": "Team culture...", "likes": 756, "shares": 34, "comments": 89},
+            ],
+        }
+
+        posts = simulated_posts.get(platform, [])
+
+        # Calculate engagement score for each post
+        for post in posts:
+            post["engagement_score"] = (
+                post["likes"] * 1
+                + post["shares"] * 2
+                + post["comments"] * 1.5
+            )
+
+        # Sort by engagement score and return top N
+        sorted_posts = sorted(posts, key=lambda x: x["engagement_score"], reverse=True)
+        return sorted_posts[:limit]
+
+    def generate_analytics_report(
+        self,
+        platforms: list[str] | None = None,
+        period_days: int = 7,
+        include_top_posts: bool = True,
+    ) -> str:
+        """Generate comprehensive analytics report in markdown format.
+
+        Args:
+            platforms: Platforms to include (default: all).
+            period_days: Analysis period in days.
+            include_top_posts: Whether to include top-performing posts.
+
+        Returns:
+            Markdown-formatted analytics report.
+        """
+        if platforms is None:
+            platforms = ["X", "Facebook", "Instagram"]
+
+        multi_summary = self.get_multi_platform_summary(platforms, period_days)
+
+        report = [
+            "# Social Media Analytics Report",
+            f"\n**Period**: Last {period_days} days",
+            f"\n**Generated**: {utcnow_iso()}",
+            "\n## Executive Summary",
+            f"\n- **Total Impressions**: {multi_summary['totals']['impressions']:,}",
+            f"- **Total Engagement**: {multi_summary['totals']['engagement']:,}",
+            f"- **Overall Engagement Rate**: {multi_summary['totals']['engagement_rate']}%",
+            f"- **Top Platform**: {multi_summary['top_platform']}",
+        ]
+
+        report.append("\n## Platform Breakdown\n")
+
+        for platform in platforms:
+            summary = multi_summary["platforms"].get(platform, {})
+            if not summary:
+                continue
+
+            metrics = summary.get("metrics", {})
+            report.append(f"\n### {platform}\n")
+            report.append(f"- **Impressions**: {metrics.get('impressions', {}).get('current', 0):,} "
+                         f"({metrics.get('impressions', {}).get('change_pct', 0):+.1f}%)")
+            report.append(f"- **Likes**: {metrics.get('likes', {}).get('current', 0):,} "
+                         f"({metrics.get('likes', {}).get('change_pct', 0):+.1f}%)")
+            report.append(f"- **Comments**: {metrics.get('comments', {}).get('current', 0):,} "
+                         f"({metrics.get('comments', {}).get('change_pct', 0):+.1f}%)")
+            report.append(f"- **Shares**: {metrics.get('shares', {}).get('current', 0):,} "
+                         f"({metrics.get('shares', {}).get('change_pct', 0):+.1f}%)")
+            report.append(f"- **Engagement Rate**: {summary.get('engagement_rate', 0)}%")
+            report.append(f"- **Summary**: {summary.get('summary', 'N/A')}")
+
+        if include_top_posts:
+            report.append("\n## Top Performing Posts\n")
+            for platform in platforms:
+                top_posts = self.get_top_performing_posts(platform, period_days, limit=3)
+                if top_posts:
+                    report.append(f"\n### {platform}\n")
+                    for i, post in enumerate(top_posts, 1):
+                        report.append(f"{i}. {post.get('content', 'N/A')[:50]}...")
+                        report.append(
+                            f"   - Likes: {post.get('likes', 0)}, "
+                            f"Shares: {post.get('shares', 0)}, "
+                            f"Comments: {post.get('comments', 0)}"
+                        )
+
+        return "\n".join(report)

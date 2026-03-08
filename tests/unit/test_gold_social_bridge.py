@@ -276,8 +276,47 @@ class TestEngagementSummary:
         assert isinstance(result, dict)
         assert result["platform"] == "X"
         assert result["period_days"] == 7
-        assert "total_posts" in result
-        assert "total_impressions" in result
-        assert "total_likes" in result
-        assert "total_comments" in result
-        assert "total_shares" in result
+        assert "metrics" in result
+        assert "posts" in result["metrics"]
+        assert "impressions" in result["metrics"]
+        assert "likes" in result["metrics"]
+        assert "comments" in result["metrics"]
+        assert "shares" in result["metrics"]
+        assert "engagement_rate" in result
+        assert "total_engagement" in result
+        assert "summary" in result
+
+    def test_get_multi_platform_summary(self, tmp_path):
+        """Test multi-platform summary aggregation."""
+        bridge = SocialBridge(tmp_path)
+
+        result = bridge.get_multi_platform_summary(["X", "Facebook"])
+
+        assert isinstance(result, dict)
+        assert "platforms" in result
+        assert "totals" in result
+        assert "top_platform" in result
+        assert "X" in result["platforms"]
+        assert "Facebook" in result["platforms"]
+
+    def test_get_top_performing_posts(self, tmp_path):
+        """Test top-performing posts retrieval."""
+        bridge = SocialBridge(tmp_path)
+
+        result = bridge.get_top_performing_posts("Instagram", limit=3)
+
+        assert isinstance(result, list)
+        assert len(result) <= 3
+        if result:
+            assert "engagement_score" in result[0]
+
+    def test_generate_analytics_report(self, tmp_path):
+        """Test analytics report generation."""
+        bridge = SocialBridge(tmp_path)
+
+        report = bridge.generate_analytics_report(period_days=7)
+
+        assert isinstance(report, str)
+        assert "# Social Media Analytics Report" in report
+        assert "Executive Summary" in report
+        assert "Platform Breakdown" in report
