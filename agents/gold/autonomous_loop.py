@@ -34,6 +34,11 @@ from agents.constants import (
 )
 from agents.exceptions import CheckpointError, StateCorruptionError
 from agents.gold.audit_gold import append_gold_log
+from agents.gold.config import (
+    LOOP_CHECKPOINT_INTERVAL,
+    LOOP_IDLE_SLEEP_SECONDS,
+    MAX_LOOP_ITERATIONS,
+)
 from agents.gold.models import LoopConfig, LoopResult, LoopState
 from agents.plan_parser import summarize_plan
 from agents.reconciler import find_incomplete_plans
@@ -41,7 +46,17 @@ from agents.utils import ensure_dir, utcnow_iso
 
 
 class AutonomousLoop:
-    """Non-terminating reasoning loop that persists until exit promise met."""
+    """Non-terminating reasoning loop that persists until exit promise met.
+    
+    The loop iterates over incomplete Plans and Needs_Action items until
+    the exit promise is met. State is checkpointed after every iteration
+    to enable session resumption after interruption.
+    
+    Attributes:
+        vault_root: Root path of the Obsidian vault.
+        config: Loop configuration (max iterations, checkpoint interval, etc.).
+        step_executor: Callable to execute individual plan steps.
+    """
 
     def __init__(
         self,
@@ -49,8 +64,20 @@ class AutonomousLoop:
         config: LoopConfig | None = None,
         step_executor: Callable[[Path, int], bool] | None = None,
     ) -> None:
+        """Initialize the autonomous loop.
+        
+        Args:
+            vault_root: Root path of the Obsidian vault.
+            config: Optional loop configuration. Uses defaults if not provided.
+            step_executor: Optional callable to execute individual plan steps.
+                          Defaults to no-op executor.
+        """
         self.vault_root = vault_root
-        self.config = config or LoopConfig()
+        self.config = config or LoopConfig(
+            max_iterations=MAX_LOOP_ITERATIONS,
+            checkpoint_interval=LOOP_CHECKPOINT_INTERVAL,
+            idle_sleep_seconds=LOOP_IDLE_SLEEP_SECONDS,
+        )
         self._step_executor = step_executor or self._default_step_executor
         self._state: LoopState | None = None
         self._running = True
