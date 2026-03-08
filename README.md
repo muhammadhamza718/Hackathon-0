@@ -4,7 +4,7 @@
 ![License MIT](https://img.shields.io/badge/license-MIT-green)
 ![Tests](https://img.shields.io/badge/tests-passing-brightgreen)
 
-A production-ready **Obsidian Vault-based AI Employee** system implementing a Bronze–Silver tiered architecture for autonomous task execution with human-in-the-loop safety gates.
+A production-ready **Obsidian Vault-based AI Employee** system implementing a Bronze–Silver–Gold tiered architecture for autonomous task execution with human-in-the-loop safety gates.
 
 > **Docs:** [Architecture](docs/architecture.md) · [API Reference](docs/api-reference.md) · [Vault Guide](docs/vault-guide.md) · [Security](docs/security.md) · [Development](docs/development.md) · [Roadmap](docs/roadmap.md) · [Glossary](docs/glossary.md) · [Deployment](docs/deployment.md) · [Testing](docs/testing-guide.md) · [Contributing](CONTRIBUTING.md) · [Changelog](CHANGELOG.md)
 
@@ -32,12 +32,58 @@ uv run python -m sentinel
 
 ## Overview
 
-This project builds an AI Digital FTE (Full-Time Employee) that operates through an Obsidian Vault as its single source of truth. The system implements two tiers:
+This project builds an AI Digital FTE (Full-Time Employee) that operates through an Obsidian Vault as its single source of truth. The system implements three tiers:
 
 | Tier | Capability | External Actions |
 |------|-----------|-----------------|
 | **Bronze** | Inbox triage, task tracking, vault management | None |
 | **Silver** | Multi-step reasoning, plan persistence, HITL approval | Via human approval gate |
+| **Gold** | Full autonomy: Odoo integration, social media, CEO briefings | Autonomous with safety gates |
+
+---
+
+## Gold Tier Features
+
+The Gold Tier adds full **Autonomous Operations** capabilities on top of Silver Tier reasoning.
+
+### Core Capabilities
+
+#### 1. Odoo Accounting Integration
+- JSON-RPC client for Odoo Community Edition
+- Bank transaction reconciliation
+- Invoice and payment entry drafting
+- Aging receivables flagging
+- Connection pooling and session management
+
+#### 2. Social Media Management
+- Multi-platform posting (X/Twitter, Facebook, Instagram)
+- Platform-specific content adaptation
+- Hashtag suggestion engine with keyword matching
+- Emoji optimization per platform
+- Image compression and EXIF stripping
+- Browser MCP automation for posting
+- Analytics aggregation with WoW/MoM trends
+
+#### 3. CEO Briefing Engine
+- Weekly automated briefing generation
+- Revenue trend analysis (WoW, MoM comparisons)
+- Visual trend indicators (🟢🟡⚪🟠🔴)
+- Subscription usage tracking
+- Bottleneck detection with escalation
+- Customizable templates (Service, Product, Freelance)
+
+#### 4. Ralph Wiggum Autonomous Loop
+- Persistent execution until exit promise met
+- Iteration progress tracking with visualization
+- Smart backoff for HITL-blocked tasks
+- State checkpointing for session resumption
+- Text-based state diagrams
+
+### Safety Gates (Human-in-the-Loop)
+- **Social media posts**: Draft to `/Pending_Approval/` before publishing
+- **Financial actions > $100**: Draft with full rationale
+- **External emails**: Draft for review
+- All approvals include risk assessment and rollback path
 
 ---
 
