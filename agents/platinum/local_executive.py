@@ -1,13 +1,16 @@
-"""Local-only execution router for Platinum."""
+﻿"""Local-only execution router for Platinum."""
 
 from __future__ import annotations
 
-from pathlib import Path
 import logging
+from pathlib import Path
 
-from agents.constants import APPROVED_DIR, DONE_DIR\nfrom agents.audit_logger import append_log
+from agents.audit_logger import append_log
+from agents.constants import APPROVED_DIR, DONE_DIR
 
-logger = logging.getLogger(__name__)\n\nLOCAL_ONLY_TOKENS = ("whatsapp", "payment", "send", "post")
+logger = logging.getLogger(__name__)
+
+LOCAL_ONLY_TOKENS = ("whatsapp", "payment", "send", "post")
 
 
 class LocalExecutive:
@@ -27,11 +30,23 @@ class LocalExecutive:
         count = 0
         for item in approved_dir.glob("*.md"):
             target = done_actions / item.name
-            item.replace(target)\n            if self._is_local_only(item):\n                append_log(self.vault_root, "local_only", f"Local-only action {item.name}", tier="platinum")
-            logger.info("Executed approved item %s", item.name)\n            append_log(self.vault_root, "execute", f"Approved item {item.name}", tier="platinum")
+            item.replace(target)
+            if self._is_local_only(target):
+                append_log(
+                    self.vault_root,
+                    "local_only",
+                    f"Local-only action {target.name}",
+                    tier="platinum",
+                )
+            logger.info("Executed approved item %s", target.name)
+            append_log(
+                self.vault_root,
+                "execute",
+                f"Approved item {target.name}",
+                tier="platinum",
+            )
             count += 1
         return count
-
 
     def _is_local_only(self, item: Path) -> bool:
         name = item.name.lower()
