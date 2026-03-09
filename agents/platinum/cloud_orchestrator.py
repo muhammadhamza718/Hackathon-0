@@ -1,4 +1,4 @@
-"""Cloud orchestrator for Platinum distributed perception."""
+﻿"""Cloud orchestrator for Platinum distributed perception."""
 
 from __future__ import annotations
 
@@ -6,11 +6,14 @@ import logging
 from pathlib import Path
 
 from agents.constants import INBOX_DIR, NEEDS_ACTION_DIR, UPDATES_DIR
-from agents.platinum.heartbeat_monitor import HeartbeatMonitor\nfrom agents.platinum.models import NodeRole
+from agents.platinum.heartbeat_monitor import HeartbeatMonitor
+from agents.platinum.models import NodeRole
 from agents.platinum.odoo_health_monitor import OdooHealthMonitor
 from agents.platinum.utils import resolve_node_id
 
-logger = logging.getLogger(__name__)\n\nLOCAL_ONLY_TOKENS = ("whatsapp", "payment", "approved", "send", "post")
+logger = logging.getLogger(__name__)
+
+LOCAL_ONLY_TOKENS = ("whatsapp", "payment", "approved", "send", "post")
 
 
 class CloudOrchestrator:
@@ -54,7 +57,6 @@ class CloudOrchestrator:
         item.replace(target)
         logger.info("Deferred local-only item %s", item.name)
 
-
     def create_odoo_draft(self, title: str, details: str) -> Path:
         """Create an approval-ready accounting draft for Local review."""
         pending = self.vault_root / "Pending_Approval"
@@ -73,4 +75,3 @@ class CloudOrchestrator:
         ]
         path.write_text("\n".join(body), encoding="utf-8")
         return path
-

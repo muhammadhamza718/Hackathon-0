@@ -20,11 +20,11 @@ FORBIDDEN_PREFIXES = (
     "runtime",
     "secrets",
     "sessions",
-    "cookies",
+    "cookies",\n    "sessions",\n    "private",
 )
 
 FORBIDDEN_EXTENSIONS = (
-    ".token",
+    ".token",\n    ".cookie",
     ".key",
     ".pem",
     ".pfx",
@@ -92,3 +92,4 @@ def classify_owner(path: Path) -> str:
     if is_cloud_owned(path):
         return "cloud"
     return "shared"
+
