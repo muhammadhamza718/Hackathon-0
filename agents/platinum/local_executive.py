@@ -5,9 +5,9 @@ from __future__ import annotations
 from pathlib import Path
 import logging
 
-from agents.constants import APPROVED_DIR, DONE_DIR
+from agents.constants import APPROVED_DIR, DONE_DIR\nfrom agents.audit_logger import append_log
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)\n\nLOCAL_ONLY_TOKENS = ("whatsapp", "payment", "send", "post")
 
 
 class LocalExecutive:
@@ -27,7 +27,12 @@ class LocalExecutive:
         count = 0
         for item in approved_dir.glob("*.md"):
             target = done_actions / item.name
-            item.replace(target)
-            logger.info("Executed approved item %s", item.name)
+            item.replace(target)\n            if self._is_local_only(item):\n                append_log(self.vault_root, "local_only", f"Local-only action {item.name}", tier="platinum")
+            logger.info("Executed approved item %s", item.name)\n            append_log(self.vault_root, "execute", f"Approved item {item.name}", tier="platinum")
             count += 1
         return count
+
+
+    def _is_local_only(self, item: Path) -> bool:
+        name = item.name.lower()
+        return any(token in name for token in LOCAL_ONLY_TOKENS)
