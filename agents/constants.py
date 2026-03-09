@@ -10,16 +10,17 @@ class Tier(Enum):
     BRONZE = "bronze"
     SILVER = "silver"
     GOLD = "gold"
+    PLATINUM = "platinum"
 
     @property
     def can_use_hitl(self) -> bool:
         """True when the tier supports human-in-the-loop gates."""
-        return self in (Tier.SILVER, Tier.GOLD)
+        return self in (Tier.SILVER, Tier.GOLD, Tier.PLATINUM)
 
     @property
     def can_act_externally(self) -> bool:
         """True when the tier can perform external actions (with approval)."""
-        return self is Tier.GOLD
+        return self in (Tier.GOLD, Tier.PLATINUM)
 
 
 # Vault folder names
@@ -32,6 +33,10 @@ APPROVED_DIR = "Approved"
 REJECTED_DIR = "Rejected"
 LOGS_DIR = "Logs"
 ARCHIVE_DIR = "Archive"
+IN_PROGRESS_DIR = "In_Progress"
+UPDATES_DIR = "Updates"
+UPDATES_HEARTBEATS_DIR = "Updates/heartbeats"
+UPDATES_SYNC_DIR = "Updates/sync"
 
 # File patterns
 PLAN_FILE_PREFIX = "PLAN-"
@@ -72,6 +77,7 @@ HITL_TIMEOUT_SECONDS = 3600  # 1 hour
 TIER_BRONZE = "bronze"
 TIER_SILVER = "silver"
 TIER_GOLD = "gold"
+TIER_PLATINUM = "platinum"
 
 # Gold Tier: loop state file
 LOOP_STATE_FILE = "loop-state.json"
@@ -101,6 +107,28 @@ GOLD_ACTIONS = frozenset(
         "circuit_breaker",
         "retry",
         "quarantine",
+        # inherited
+        "triage",
+        "complete",
+        "move",
+        "create",
+        "update_dashboard",
+        "error",
+    }
+)
+
+# Platinum Tier: distributed audit actions
+PLATINUM_ACTIONS = frozenset(
+    {
+        "sync_cycle",
+        "sync_blocked",
+        "claim_create",
+        "claim_confirm",
+        "claim_release",
+        "claim_conflict",
+        "heartbeat_publish",
+        "heartbeat_stale",
+        "odoo_health",
         # inherited
         "triage",
         "complete",
