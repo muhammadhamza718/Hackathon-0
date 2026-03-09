@@ -10,7 +10,7 @@ from agents.platinum.heartbeat_monitor import HeartbeatMonitor\nfrom agents.plat
 from agents.platinum.odoo_health_monitor import OdooHealthMonitor
 from agents.platinum.utils import resolve_node_id
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)\n\nLOCAL_ONLY_TOKENS = ("whatsapp", "payment", "approved", "send", "post")
 
 
 class CloudOrchestrator:
@@ -45,7 +45,7 @@ class CloudOrchestrator:
 
     def _is_local_only(self, item: Path) -> bool:
         name = item.name.lower()
-        return any(token in name for token in ("whatsapp", "payment", "approved"))
+        return any(token in name for token in LOCAL_ONLY_TOKENS)
 
     def _defer_to_local(self, item: Path) -> None:
         updates_dir = self.vault_root / UPDATES_DIR / "deferred"
@@ -73,3 +73,4 @@ class CloudOrchestrator:
         ]
         path.write_text("\n".join(body), encoding="utf-8")
         return path
+
