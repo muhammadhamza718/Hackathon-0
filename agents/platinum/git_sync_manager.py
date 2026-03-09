@@ -1,12 +1,13 @@
-"""Git-based sync engine for Platinum distributed vaults."""
+﻿"""Git-based sync engine for Platinum distributed vaults."""
 
 from __future__ import annotations
 
+import json
 import subprocess
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Iterable\nimport json
+from typing import Iterable
 
 from agents.platinum.models import SyncResult, SyncState
 from agents.platinum.sync_policy import classify_owner, is_forbidden_path

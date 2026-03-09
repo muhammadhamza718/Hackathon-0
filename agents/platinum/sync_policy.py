@@ -1,4 +1,4 @@
-"""Sync ownership and exclusion policy for Platinum Git sync."""
+﻿"""Sync ownership and exclusion policy for Platinum Git sync."""
 
 from __future__ import annotations
 
@@ -20,11 +20,13 @@ FORBIDDEN_PREFIXES = (
     "runtime",
     "secrets",
     "sessions",
-    "cookies",\n    "sessions",\n    "private",
+    "cookies",
+    "private",
 )
 
 FORBIDDEN_EXTENSIONS = (
-    ".token",\n    ".cookie",
+    ".token",
+    ".cookie",
     ".key",
     ".pem",
     ".pfx",
@@ -92,4 +94,3 @@ def classify_owner(path: Path) -> str:
     if is_cloud_owned(path):
         return "cloud"
     return "shared"
-
