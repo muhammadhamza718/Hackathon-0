@@ -52,3 +52,16 @@ build/
 
 # Misc
 *.bak
+
+# Runtime (Platinum)
+.runtime/
+runtime/
+secrets/
+sessions/
+cookies/
+*.token
+*.key
+*.pem
+*.pfx
+*.p12
+*.kdbx
