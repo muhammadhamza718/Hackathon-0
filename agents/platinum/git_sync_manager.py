@@ -6,7 +6,7 @@ import subprocess
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable\nimport json
 
 from agents.platinum.models import SyncResult, SyncState
 from agents.platinum.sync_policy import classify_owner, is_forbidden_path
@@ -97,3 +97,24 @@ class GitSyncManager:
         if push.returncode != 0:
             return self._sync_state(SyncResult.FAILED)
         return self._sync_state(SyncResult.SUCCESS)
+
+    def resolve_conflicts(self) -> list[str]:
+        conflicts: list[str] = []
+        proc = self._run(["git", "diff", "--name-only", "--diff-filter=U"])
+        for line in proc.stdout.splitlines():
+            if not line:
+                continue
+            conflicts.append(line)
+        if conflicts:
+            updates = self.repo_root / "Updates" / "conflicts"
+            updates.mkdir(parents=True, exist_ok=True)
+            path = updates / f"sync-conflict-{self.node_id}.txt"
+            path.write_text("\n".join(conflicts), encoding="utf-8")
+        return conflicts
+
+    def emit_sync_status(self, state: SyncState) -> Path:
+        updates = self.repo_root / "Updates" / "sync"
+        updates.mkdir(parents=True, exist_ok=True)
+        path = updates / f"{self.node_id}.json"
+        path.write_text(json.dumps(state.to_dict(), indent=2), encoding="utf-8")
+        return path
