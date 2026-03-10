@@ -1,4 +1,4 @@
-"""Heartbeat publishing and staleness checks for Platinum nodes."""
+﻿"""Heartbeat publishing and staleness checks for Platinum nodes."""
 
 from __future__ import annotations
 
@@ -43,7 +43,9 @@ class HeartbeatMonitor:
             "plans": count(PLANS_DIR),
         }
 
-    def publish(self, last_sync_at: datetime | None = None, odoo_status: str | None = None) -> NodeHeartbeat:
+    def publish(
+        self, last_sync_at: datetime | None = None, odoo_status: str | None = None
+    ) -> NodeHeartbeat:
         now = datetime.utcnow()
         heartbeat = NodeHeartbeat(
             node_id=self.node_id,
@@ -71,9 +73,47 @@ class HeartbeatMonitor:
             return None
         return json.loads(path.read_text(encoding="utf-8"))
 
+    def read_heartbeat(self, node_id: str) -> NodeHeartbeat | None:
+        data = self.read(node_id)
+        if not data:
+            return None
+        return NodeHeartbeat(
+            node_id=data["node_id"],
+            role=NodeRole(data["role"]),
+            status=NodeStatus(data["status"]),
+            last_seen_at=self._parse_timestamp(data["last_seen_at"]),
+            last_sync_at=self._parse_timestamp(data["last_sync_at"])
+            if data.get("last_sync_at")
+            else None,
+            queue_counts=data.get("queue_counts", {}),
+            odoo_status=data.get("odoo_status"),
+            notes=data.get("notes"),
+        )
+
     def is_stale(self, node_id: str, stale_seconds: int) -> bool:
         data = self.read(node_id)
         if not data:
             return True
-        last_seen = datetime.fromisoformat(data["last_seen_at"].replace("Z", ""))
+        last_seen = self._parse_timestamp(data["last_seen_at"])
         return datetime.utcnow() - last_seen > timedelta(seconds=stale_seconds)
+
+    def evaluate_status(
+        self, node_id: str, warn_seconds: int, stale_seconds: int
+    ) -> tuple[NodeStatus, float | None]:
+        data = self.read(node_id)
+        if not data:
+            return NodeStatus.OFFLINE, None
+        last_seen = self._parse_timestamp(data["last_seen_at"])
+        age = (datetime.utcnow() - last_seen).total_seconds()
+        if age > stale_seconds:
+            return NodeStatus.OFFLINE, age
+        if age > warn_seconds:
+            return NodeStatus.DEGRADED, age
+        return NodeStatus.HEALTHY, age
+
+    def should_enter_single_node_mode(self, node_id: str, stale_seconds: int) -> bool:
+        status, _ = self.evaluate_status(node_id, stale_seconds, stale_seconds)
+        return status is NodeStatus.OFFLINE
+
+    def _parse_timestamp(self, value: str) -> datetime:
+        return datetime.fromisoformat(value.replace("Z", ""))
