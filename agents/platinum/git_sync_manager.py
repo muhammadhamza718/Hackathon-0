@@ -8,8 +8,17 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Iterable
+from uuid import uuid4
 
-from agents.platinum.models import SyncResult, SyncState
+from agents.constants import (
+    APPROVED_DIR,
+    DASHBOARD_FILE,
+    IN_PROGRESS_DIR,
+    PLANS_DIR,
+    REJECTED_DIR,
+    UPDATES_DIR,
+)
+from agents.platinum.models import ConflictRecord, ConflictType, SyncResult, SyncState
 from agents.platinum.sync_policy import classify_owner, is_forbidden_path
 
 
@@ -121,12 +130,14 @@ class GitSyncManager:
         preflight = self.preflight()
         if preflight.blocked:
             finished_at = datetime.utcnow()
-            return self._sync_state(
+            state = self._sync_state(
                 SyncResult.BLOCKED,
                 started_at,
                 finished_at,
                 excluded_paths=preflight.forbidden + preflight.local_owned,
             )
+            self.emit_sync_status(state)
+            return state
         files = self._changed_files()
         self._stage_allowed(files)
         self._commit_if_needed(message)
@@ -135,17 +146,23 @@ class GitSyncManager:
         if pull.returncode != 0:
             finished_at = datetime.utcnow()
             conflicts = self.resolve_conflicts()
-            return self._sync_state(
+            state = self._sync_state(
                 SyncResult.CONFLICT,
                 started_at,
                 finished_at,
                 conflicted_files=conflicts,
             )
+            self.emit_sync_status(state)
+            return state
         push = self._run(["git", "push", self.remote, self.branch])
         finished_at = datetime.utcnow()
         if push.returncode != 0:
-            return self._sync_state(SyncResult.FAILED, started_at, finished_at)
-        return self._sync_state(SyncResult.SUCCESS, started_at, finished_at)
+            state = self._sync_state(SyncResult.FAILED, started_at, finished_at)
+            self.emit_sync_status(state)
+            return state
+        state = self._sync_state(SyncResult.SUCCESS, started_at, finished_at)
+        self.emit_sync_status(state)
+        return state
 
     def resolve_conflicts(self) -> list[str]:
         conflicts: list[str] = []
@@ -154,15 +171,74 @@ class GitSyncManager:
             if not line:
                 continue
             conflicts.append(line)
+            conflict_type = self._classify_conflict(line)
+            self._record_conflict(line, conflict_type)
+            if conflict_type is ConflictType.PLAN:
+                self._divert_plan_conflict(Path(line))
+            if conflict_type is ConflictType.DASHBOARD and self.node_id == "cloud":
+                self._divert_dashboard_conflict(Path(line))
         if conflicts:
-            updates = self.repo_root / "Updates" / "conflicts"
+            updates = self.repo_root / UPDATES_DIR / "conflicts"
             updates.mkdir(parents=True, exist_ok=True)
             path = updates / f"sync-conflict-{self.node_id}.txt"
             path.write_text("\n".join(conflicts), encoding="utf-8")
         return conflicts
 
+    def _classify_conflict(self, path: str) -> ConflictType:
+        if path.endswith(DASHBOARD_FILE):
+            return ConflictType.DASHBOARD
+        if path.startswith(PLANS_DIR + "/"):
+            return ConflictType.PLAN
+        if path.startswith(IN_PROGRESS_DIR + "/"):
+            return ConflictType.CLAIM
+        if path.startswith(APPROVED_DIR + "/") or path.startswith(REJECTED_DIR + "/"):
+            return ConflictType.APPROVAL
+        return ConflictType.GENERIC
+
+    def _record_conflict(self, path: str, conflict_type: ConflictType) -> ConflictRecord:
+        if conflict_type is ConflictType.DASHBOARD:
+            winning = "local"
+            resolution = "policy_resolved"
+            notes = "local owns Dashboard.md"
+        elif conflict_type is ConflictType.PLAN:
+            winning = "manual_review"
+            resolution = "manual_review"
+            notes = "plan conflict diverted"
+        else:
+            winning = "manual_review"
+            resolution = "manual_review"
+            notes = "manual review required"
+        record = ConflictRecord(
+            conflict_id=str(uuid4()),
+            file_path=path,
+            conflict_type=conflict_type,
+            winning_node=winning,
+            losing_node=None,
+            resolution_state=resolution,
+            notes=notes,
+        )
+        conflicts_dir = self.repo_root / UPDATES_DIR / "conflicts"
+        conflicts_dir.mkdir(parents=True, exist_ok=True)
+        record_path = conflicts_dir / f"conflict-{record.conflict_id}.json"
+        record_path.write_text(json.dumps(record.to_dict(), indent=2), encoding="utf-8")
+        return record
+
+    def _divert_plan_conflict(self, path: Path) -> None:
+        updates_dir = self.repo_root / UPDATES_DIR / "plans"
+        updates_dir.mkdir(parents=True, exist_ok=True)
+        if path.exists():
+            dest = updates_dir / f"{path.stem}.conflict.{self.node_id}{path.suffix}"
+            dest.write_text(path.read_text(encoding="utf-8"), encoding="utf-8")
+
+    def _divert_dashboard_conflict(self, path: Path) -> None:
+        updates_dir = self.repo_root / UPDATES_DIR / "dashboard"
+        updates_dir.mkdir(parents=True, exist_ok=True)
+        if path.exists():
+            dest = updates_dir / f"{path.stem}.conflict.{self.node_id}{path.suffix}"
+            dest.write_text(path.read_text(encoding="utf-8"), encoding="utf-8")
+
     def emit_sync_status(self, state: SyncState) -> Path:
-        updates = self.repo_root / "Updates" / "sync"
+        updates = self.repo_root / UPDATES_DIR / "sync"
         updates.mkdir(parents=True, exist_ok=True)
         path = updates / f"{self.node_id}.json"
         path.write_text(json.dumps(state.to_dict(), indent=2), encoding="utf-8")
