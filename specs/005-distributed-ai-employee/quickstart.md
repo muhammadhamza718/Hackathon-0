@@ -1,4 +1,4 @@
-# Quickstart: Platinum Distributed AI Employee
+﻿# Quickstart: Platinum Distributed AI Employee
 
 ## Purpose
 
@@ -11,6 +11,18 @@ This guide validates the planned Platinum architecture before implementation. It
 - Separate cloud and local runtime secret stores
 - Cloud-accessible Odoo instance behind HTTPS
 - Existing Bronze/Silver/Gold vault folders initialized
+
+## Runtime Layout
+
+**Shared (Git-synced)**
+- `/Inbox/`, `/Needs_Action/`, `/Plans/`, `/In_Progress/`, `/Updates/`
+- `/Pending_Approval/`, `/Approved/`, `/Rejected/`, `/Done/`
+- `Dashboard.md` (local-authored only; cloud writes proposals into `/Updates/`)
+
+**Unsynced runtime (local or cloud only)**
+- `.runtime/local/` (WhatsApp sessions, browser profiles, payment credentials)
+- `.runtime/cloud/` (cloud service tokens, low-privilege credentials)
+- `.env`, tokens, private keys, cookie jars, and session files must remain outside Git sync
 
 ## 1. Prepare the two-node workspace
 
