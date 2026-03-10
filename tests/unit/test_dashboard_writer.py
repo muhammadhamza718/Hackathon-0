@@ -54,6 +54,11 @@ class TestGenerateDashboard:
         md = generate_dashboard(vault)
         assert "| Inbox | 1 |" in md
 
+    def test_includes_distributed_status_section(self, vault: Path):
+        md = generate_dashboard(vault)
+        assert "## Distributed Status" in md
+        assert "## Distributed Alerts" in md
+
 
 class TestWriteDashboard:
     def test_creates_file(self, vault: Path):
