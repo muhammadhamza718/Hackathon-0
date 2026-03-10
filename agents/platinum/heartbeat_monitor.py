@@ -17,6 +17,7 @@ from agents.constants import (
     PLANS_DIR,
     UPDATES_HEARTBEATS_DIR,
 )
+from agents.gold.audit_gold import log_heartbeat_event
 from agents.platinum.models import NodeHeartbeat, NodeRole, NodeStatus
 
 
@@ -58,6 +59,12 @@ class HeartbeatMonitor:
             notes=None,
         )
         self._write_heartbeat(heartbeat)
+        log_heartbeat_event(
+            self.vault_root,
+            action="heartbeat_publish",
+            rationale="Heartbeat published",
+            details=f"node={self.node_id}",
+        )
         return heartbeat
 
     def _write_heartbeat(self, heartbeat: NodeHeartbeat) -> Path:
@@ -113,7 +120,15 @@ class HeartbeatMonitor:
 
     def should_enter_single_node_mode(self, node_id: str, stale_seconds: int) -> bool:
         status, _ = self.evaluate_status(node_id, stale_seconds, stale_seconds)
-        return status is NodeStatus.OFFLINE
+        if status is NodeStatus.OFFLINE:
+            log_heartbeat_event(
+                self.vault_root,
+                action="heartbeat_stale",
+                rationale="Heartbeat stale threshold exceeded",
+                details=f"node={node_id}",
+            )
+            return True
+        return False
 
     def _parse_timestamp(self, value: str) -> datetime:
         return datetime.fromisoformat(value.replace("Z", ""))
