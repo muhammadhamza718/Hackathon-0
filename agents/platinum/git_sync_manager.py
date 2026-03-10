@@ -18,6 +18,7 @@ from agents.constants import (
     REJECTED_DIR,
     UPDATES_DIR,
 )
+from agents.gold.audit_gold import log_sync_event
 from agents.platinum.models import ConflictRecord, ConflictType, SyncResult, SyncState
 from agents.platinum.sync_policy import classify_owner, is_forbidden_path
 
@@ -137,6 +138,7 @@ class GitSyncManager:
                 excluded_paths=preflight.forbidden + preflight.local_owned,
             )
             self.emit_sync_status(state)
+            self._log_sync(state)
             return state
         files = self._changed_files()
         self._stage_allowed(files)
@@ -153,15 +155,18 @@ class GitSyncManager:
                 conflicted_files=conflicts,
             )
             self.emit_sync_status(state)
+            self._log_sync(state)
             return state
         push = self._run(["git", "push", self.remote, self.branch])
         finished_at = datetime.utcnow()
         if push.returncode != 0:
             state = self._sync_state(SyncResult.FAILED, started_at, finished_at)
             self.emit_sync_status(state)
+            self._log_sync(state)
             return state
         state = self._sync_state(SyncResult.SUCCESS, started_at, finished_at)
         self.emit_sync_status(state)
+        self._log_sync(state)
         return state
 
     def resolve_conflicts(self) -> list[str]:
@@ -243,3 +248,12 @@ class GitSyncManager:
         path = updates / f"{self.node_id}.json"
         path.write_text(json.dumps(state.to_dict(), indent=2), encoding="utf-8")
         return path
+
+    def _log_sync(self, state: SyncState) -> None:
+        log_sync_event(
+            self.repo_root,
+            result=state.result.value,
+            rationale="Sync cycle completed",
+            details=f"result={state.result.value}",
+            source_file=f"Updates/sync/{self.node_id}.json",
+        )
