@@ -1,4 +1,4 @@
-"""AI Employee agents package — Bronze, Silver, and Gold tier agents."""
+﻿"""AI Employee agents package â€” Bronze, Silver, and Gold tier agents."""
 
 from agents.audit_logger import AuditEntry
 from agents.complexity_detector import ComplexityLevel, ComplexityResult
@@ -38,7 +38,15 @@ from agents.validators import ValidationResult
 from agents.vault_context import vault_session
 from agents.vault_init import InitResult
 from agents.vault_router import ClassificationResult, TaskClassification
-
+from agents.platinum.claim_manager import ClaimManager
+from agents.platinum.cloud_orchestrator import CloudOrchestrator
+from agents.platinum.config import PlatinumConfig
+from agents.platinum.dashboard_federator import FederatedStatus
+from agents.platinum.git_sync_manager import GitSyncManager
+from agents.platinum.heartbeat_monitor import HeartbeatMonitor
+from agents.platinum.local_executive import LocalExecutive
+from agents.platinum.models import ConflictRecord, NodeHeartbeat, NodeRole, NodeStatus, SyncState, TaskClaim
+from agents.platinum.odoo_health_monitor import OdooHealthMonitor
 __version__ = "0.5.0"
 __author__ = "muhammadhamza718"
 
@@ -102,4 +110,20 @@ __all__ = [
     "read_gold_log",
     "load_odoo_config",
     "classify_error",
+    # Platinum Tier
+    "CloudOrchestrator",
+    "LocalExecutive",
+    "GitSyncManager",
+    "ClaimManager",
+    "HeartbeatMonitor",
+    "OdooHealthMonitor",
+    "PlatinumConfig",
+    "FederatedStatus",
+    "NodeHeartbeat",
+    "NodeRole",
+    "NodeStatus",
+    "TaskClaim",
+    "SyncState",
+    "ConflictRecord",
 ]
+

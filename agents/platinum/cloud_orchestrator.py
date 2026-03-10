@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from agents.constants import INBOX_DIR, NEEDS_ACTION_DIR, UPDATES_DIR
+from agents.constants import INBOX_DIR, NEEDS_ACTION_DIR, PENDING_APPROVAL_DIR, UPDATES_DIR
 from agents.platinum.heartbeat_monitor import HeartbeatMonitor
 from agents.platinum.models import NodeRole
 from agents.platinum.odoo_health_monitor import OdooHealthMonitor
@@ -59,14 +59,16 @@ class CloudOrchestrator:
 
     def create_odoo_draft(self, title: str, details: str) -> Path:
         """Create an approval-ready accounting draft for Local review."""
-        pending = self.vault_root / "Pending_Approval"
+        pending = self.vault_root / PENDING_APPROVAL_DIR
         pending.mkdir(parents=True, exist_ok=True)
         filename = f"odoo-draft-{title.replace(' ', '-').lower()}.md"
         path = pending / filename
+        heartbeat = self.odoo_monitor.heartbeat()
         body = [
             f"# Odoo Draft: {title}",
             "",
             "Status: draft",
+            f"Odoo Health: {heartbeat.status}",
             "",
             "## Details",
             details,
