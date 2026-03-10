@@ -1,4 +1,4 @@
-"""Gold-tier JSON audit logger.
+﻿"""Gold-tier JSON audit logger.
 
 Provides append-only audit logging for all Gold Tier operations per
 Constitution XVI (Auditability).
@@ -80,7 +80,7 @@ class GoldAuditLogger:
             rationale: Mandatory explanation for why the action was taken.
             source_file: Vault-relative path of the file acted upon.
             details: Human-readable description of the action.
-            result: Outcome — success, failure, warning, or skipped.
+            result: Outcome â€” success, failure, warning, or skipped.
             iteration: Ralph Wiggum loop cycle count.
             duration_ms: Execution time in milliseconds.
 
@@ -188,3 +188,89 @@ class GoldAuditLogger:
             counts[result] = counts.get(result, 0) + 1
 
         return counts
+
+
+def append_gold_log(
+    vault_root: str | Path,
+    action: str,
+    details: str,
+    rationale: str,
+    source_file: str = "",
+    result: str = "success",
+    iteration: int = 0,
+    duration_ms: int = 0,
+) -> GoldAuditEntry:
+    """Append a Gold audit entry to the vault Logs directory."""
+    logger = GoldAuditLogger(logs_dir=Path(vault_root) / "Logs")
+    return logger.log_action(
+        action=action,
+        rationale=rationale,
+        source_file=source_file,
+        details=details,
+        result=result,
+        iteration=iteration,
+        duration_ms=duration_ms,
+    )
+
+
+def read_gold_log(vault_root: str | Path, date_str: str | None = None) -> list[GoldAuditEntry]:
+    """Read Gold audit entries for a specific date."""
+    logger = GoldAuditLogger(logs_dir=Path(vault_root) / "Logs")
+    if date_str is None:
+        date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    return logger.get_entries_for_date(date_str)
+
+
+def log_sync_event(
+    vault_root: str | Path,
+    result: str,
+    rationale: str,
+    details: str = "",
+    source_file: str = "",
+) -> GoldAuditEntry:
+    """Log a distributed sync event."""
+    action = "sync_cycle"
+    if result == "blocked":
+        action = "sync_blocked"
+    return append_gold_log(
+        vault_root=vault_root,
+        action=action,
+        details=details,
+        rationale=rationale,
+        source_file=source_file,
+        result="success" if result == "success" else "warning",
+    )
+
+
+def log_claim_event(
+    vault_root: str | Path,
+    action: str,
+    rationale: str,
+    details: str = "",
+    source_file: str = "",
+) -> GoldAuditEntry:
+    """Log a distributed claim event."""
+    return append_gold_log(
+        vault_root=vault_root,
+        action=action,
+        details=details,
+        rationale=rationale,
+        source_file=source_file,
+    )
+
+
+def log_heartbeat_event(
+    vault_root: str | Path,
+    action: str,
+    rationale: str,
+    details: str = "",
+    source_file: str = "",
+) -> GoldAuditEntry:
+    """Log a distributed heartbeat event."""
+    return append_gold_log(
+        vault_root=vault_root,
+        action=action,
+        details=details,
+        rationale=rationale,
+        source_file=source_file,
+    )
