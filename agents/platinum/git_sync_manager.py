@@ -47,6 +47,25 @@ class GitSyncManager:
             files.append(Path(path))
         return files
 
+    def _ahead_behind(self) -> tuple[int, int]:
+        proc = self._run(
+            [
+                "git",
+                "rev-list",
+                "--left-right",
+                "--count",
+                f"{self.remote}/{self.branch}...HEAD",
+            ]
+        )
+        if proc.returncode != 0:
+            return 0, 0
+        parts = proc.stdout.strip().split()
+        if len(parts) != 2:
+            return 0, 0
+        behind = int(parts[0])
+        ahead = int(parts[1])
+        return ahead, behind
+
     def preflight(self) -> PreflightResult:
         forbidden: list[str] = []
         local_owned: list[str] = []
@@ -63,12 +82,26 @@ class GitSyncManager:
             local_owned=local_owned,
         )
 
-    def _sync_state(self, result: SyncResult) -> SyncState:
+    def _sync_state(
+        self,
+        result: SyncResult,
+        started_at: datetime,
+        finished_at: datetime,
+        conflicted_files: list[str] | None = None,
+        excluded_paths: list[str] | None = None,
+    ) -> SyncState:
+        ahead, behind = self._ahead_behind()
+        latency = (datetime.utcnow() - finished_at).total_seconds()
         return SyncState(
             node_id=self.node_id,
-            sync_started_at=datetime.utcnow(),
-            sync_finished_at=datetime.utcnow(),
+            sync_started_at=started_at,
+            sync_finished_at=finished_at,
             result=result,
+            ahead_count=ahead,
+            behind_count=behind,
+            conflicted_files=conflicted_files or [],
+            excluded_paths_detected=excluded_paths or [],
+            latency_seconds=latency,
         )
 
     def _stage_allowed(self, files: Iterable[Path]) -> None:
@@ -84,20 +117,35 @@ class GitSyncManager:
         self._run(["git", "commit", "-m", message])
 
     def sync_once(self, message: str) -> SyncState:
+        started_at = datetime.utcnow()
         preflight = self.preflight()
         if preflight.blocked:
-            return self._sync_state(SyncResult.BLOCKED)
+            finished_at = datetime.utcnow()
+            return self._sync_state(
+                SyncResult.BLOCKED,
+                started_at,
+                finished_at,
+                excluded_paths=preflight.forbidden + preflight.local_owned,
+            )
         files = self._changed_files()
         self._stage_allowed(files)
         self._commit_if_needed(message)
         self._run(["git", "fetch", "--all", "--prune"])
         pull = self._run(["git", "pull", "--rebase", self.remote, self.branch])
         if pull.returncode != 0:
-            return self._sync_state(SyncResult.CONFLICT)
+            finished_at = datetime.utcnow()
+            conflicts = self.resolve_conflicts()
+            return self._sync_state(
+                SyncResult.CONFLICT,
+                started_at,
+                finished_at,
+                conflicted_files=conflicts,
+            )
         push = self._run(["git", "push", self.remote, self.branch])
+        finished_at = datetime.utcnow()
         if push.returncode != 0:
-            return self._sync_state(SyncResult.FAILED)
-        return self._sync_state(SyncResult.SUCCESS)
+            return self._sync_state(SyncResult.FAILED, started_at, finished_at)
+        return self._sync_state(SyncResult.SUCCESS, started_at, finished_at)
 
     def resolve_conflicts(self) -> list[str]:
         conflicts: list[str] = []
