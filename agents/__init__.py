@@ -5,6 +5,30 @@ from agents.complexity_detector import ComplexityLevel, ComplexityResult
 from agents.constants import Tier
 from agents.dashboard_writer import VaultStatus
 from agents.exceptions import AgentError, VaultError, VaultStructureError
+from agents.gold.audit_gold import append_gold_log, read_gold_log
+from agents.gold.autonomous_loop import AutonomousLoop
+from agents.gold.briefing_engine import CEOBriefingEngine
+from agents.gold.models import (
+    BriefingConfig,
+    BottleneckTask,
+    CEOBriefing,
+    CircuitBreakerState,
+    GoldAuditEntry,
+    LoopConfig,
+    LoopResult,
+    LoopState,
+    OdooConfig,
+    OdooOperation,
+    OdooSession,
+    PublishResult,
+    QuarantinedItem,
+    SocialDraft,
+    SubscriptionFinding,
+)
+from agents.gold.odoo_rpc_client import OdooRPCClient, load_odoo_config
+from agents.gold.resilient_executor import ResilientExecutor, classify_error
+from agents.gold.safety_gate import GoldSafetyGate
+from agents.gold.social_bridge import SocialBridge
 from agents.hitl_gate import Decision
 from agents.inbox_scanner import Priority, ScanResult
 from agents.plan_manager import PlanStatus
@@ -50,4 +74,32 @@ __all__ = [
     "ValidationResult",
     "InitResult",
     "vault_session",
+    # Gold Tier - Models
+    "BriefingConfig",
+    "BottleneckTask",
+    "CEOBriefing",
+    "CircuitBreakerState",
+    "GoldAuditEntry",
+    "LoopConfig",
+    "LoopResult",
+    "LoopState",
+    "OdooConfig",
+    "OdooOperation",
+    "OdooSession",
+    "PublishResult",
+    "QuarantinedItem",
+    "SocialDraft",
+    "SubscriptionFinding",
+    # Gold Tier - Classes
+    "AutonomousLoop",
+    "CEOBriefingEngine",
+    "GoldSafetyGate",
+    "OdooRPCClient",
+    "ResilientExecutor",
+    "SocialBridge",
+    # Gold Tier - Functions
+    "append_gold_log",
+    "read_gold_log",
+    "load_odoo_config",
+    "classify_error",
 ]
