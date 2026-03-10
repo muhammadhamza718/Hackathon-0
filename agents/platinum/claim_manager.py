@@ -9,6 +9,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from agents.constants import IN_PROGRESS_DIR, NEEDS_ACTION_DIR, UPDATES_DIR
+from agents.gold.audit_gold import log_claim_event
 from agents.platinum.models import (
     ClaimState,
     ConflictRecord,
@@ -47,6 +48,12 @@ class ClaimManager:
             last_heartbeat_at=None,
         )
         self.write_claim_sidecar(target_path, claim)
+        log_claim_event(
+            self.vault_root,
+            action="claim_create",
+            rationale="Claimed task for execution",
+            details=target_path.name,
+        )
         return claim
 
     def _sidecar_path(self, task_path: Path) -> Path:
@@ -90,6 +97,12 @@ class ClaimManager:
             lease_expires_at=now + timedelta(seconds=self.lease_seconds),
         )
         self.write_claim_sidecar(Path(updated.current_path), updated)
+        log_claim_event(
+            self.vault_root,
+            action="claim_confirm",
+            rationale="Claim confirmed after sync",
+            details=Path(updated.current_path).name,
+        )
         return updated
 
     def refresh_lease(self, claim: TaskClaim) -> TaskClaim:
@@ -119,6 +132,12 @@ class ClaimManager:
             lease_expires_at=datetime.utcnow(),
         )
         self.write_claim_sidecar(Path(updated.current_path), updated)
+        log_claim_event(
+            self.vault_root,
+            action="claim_release",
+            rationale="Claim released",
+            details=f"{Path(updated.current_path).name} ({next_state.value})",
+        )
         return updated
 
     def is_stale(self, claim: TaskClaim) -> bool:
@@ -140,6 +159,12 @@ class ClaimManager:
             notes="earliest claim wins",
         )
         self._write_conflict_record(record)
+        log_claim_event(
+            self.vault_root,
+            action="claim_conflict",
+            rationale="Claim conflict resolved",
+            details=f"winner={winner.owner_node} loser={loser.owner_node}",
+        )
         return record
 
     def _select_winner(
