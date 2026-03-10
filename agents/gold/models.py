@@ -1,4 +1,4 @@
-"""Gold Tier data models — Pydantic v2 models for all Gold entities.
+﻿"""Gold Tier data models â€” Pydantic v2 models for all Gold entities.
 
 Provides runtime validation, serialization, and type safety for all
 Gold Tier data structures.
@@ -34,8 +34,7 @@ GOLD_ACTIONS: frozenset[str] = frozenset(
         "move",
         "create",
         "update_dashboard",
-        "error",
-    }
+        "error",`n        "sync_cycle",`n        "sync_blocked",`n        "claim_create",`n        "claim_confirm",`n        "claim_release",`n        "claim_conflict",`n        "heartbeat_publish",`n        "heartbeat_stale",`n        "odoo_health",`n    }
 )
 
 
@@ -52,7 +51,7 @@ class GoldAuditEntry(BaseModel):
         action: Action type (must be a valid Gold action).
         source_file: Vault-relative path of the file acted upon.
         details: Human-readable description of the action.
-        result: Outcome — success, failure, warning, or skipped.
+        result: Outcome â€” success, failure, warning, or skipped.
         rationale: Mandatory explanation for why the action was taken.
         iteration: Ralph Wiggum loop cycle count.
         tier: Tier identifier (default: "gold").
@@ -404,3 +403,4 @@ class PublishResult(BaseModel):
         if not v or not v.strip():
             raise ValueError("Platform cannot be empty")
         return v.strip()
+
