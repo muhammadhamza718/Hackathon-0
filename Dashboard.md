@@ -1,6 +1,6 @@
 # 🧠 Silver Tier Agent Dashboard
 
-**Last Updated**: `2026-02-24T00:00:00Z`
+**Last Updated**: `2026-02-28T00:00:00Z`
 **Vault**: Silver Tier Reasoning System
 **Agent**: obsidian-vault-agent
 
@@ -26,13 +26,13 @@ _No active missions. Vault is idle._
 
 ## 🚨 Alerts
 
-_No active alerts._
+- READY FOR EXECUTION: `partner-campaign-summary-email.md` is approved and waiting to be sent. Requires human to send (Bronze Tier cannot send emails).
 
 ---
 
 ## 🕐 Recent Activity
 
-_No activity recorded yet._
+- `2026-02-28` -- APPROVED: `partner-campaign-summary-email.md` moved from Pending_Approval/ to Approved/. Email draft to partner re: AI robot book marketing campaign.
 
 ---
 

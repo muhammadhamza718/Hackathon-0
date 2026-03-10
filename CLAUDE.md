@@ -208,3 +208,10 @@ Wait for consent; never auto-create ADRs. Group related decisions (stacks, authe
 
 ## Code Standards
 See `.specify/memory/constitution.md` for code quality, testing, performance, security, and architecture principles.
+
+## Active Technologies
+- Python 3.11+ (existing codebase standard) + `requests` (Odoo JSON-RPC), `python-dotenv` (config), `pydantic` (validation) — all new deps must be minimal. Browser MCP client via existing MCP protocol. (004-gold-autonomous-employee)
+- Local vault (Obsidian Markdown + JSON in `/Logs/`). Odoo Community 19+ for accounting data (external, via JSON-RPC). No new databases. (004-gold-autonomous-employee)
+
+## Recent Changes
+- 004-gold-autonomous-employee: Added Python 3.11+ (existing codebase standard) + `requests` (Odoo JSON-RPC), `python-dotenv` (config), `pydantic` (validation) — all new deps must be minimal. Browser MCP client via existing MCP protocol.
