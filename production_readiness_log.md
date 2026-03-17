@@ -225,3 +225,4 @@ Tracking improvements natively safely.
 - [`2026-03-17T09:20:00`] chore: set up production security headers securely
 - [`2026-03-17T09:40:00`] chore: set up production security headers securely
 - [`2026-03-17T10:00:00`] style: format code according to strict linter rules
+- [`2026-03-17T10:20:00`] docs: improve deployment documentation for production
