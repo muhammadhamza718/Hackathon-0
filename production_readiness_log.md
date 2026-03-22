@@ -369,3 +369,4 @@ Tracking improvements natively safely.
 - [`2026-03-22T10:40:00`] chore: set up production security headers securely
 - [`2026-03-22T11:00:00`] fix: patch race condition in state management
 - [`2026-03-22T11:20:00`] chore: update core dependencies and patch vulnerabilities
+- [`2026-03-22T11:40:00`] docs: improve deployment documentation for production
